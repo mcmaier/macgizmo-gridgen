@@ -109,6 +109,13 @@
   function setMountDiameter(e) {
     config.mountingHoles = { ...config.mountingHoles, diameter: +e.target.value };
   }
+
+  function toggleLabel(which) {
+    config.labels = {
+      ...config.labels,
+      [which]: !config.labels[which],
+    };
+  }
 </script>
 
 <div class="controls">
@@ -203,6 +210,16 @@
         </div>
       </div>
     {/if}
+  </div>
+
+  <div class="control-group">
+    <h3>Labels (Silkscreen)</h3>
+    <div class="rail-toggles">
+      <button class="rail-btn" class:active={config.labels.rows}
+        onclick={() => toggleLabel('rows')}>Rows (1, 5, 10…)</button>
+      <button class="rail-btn" class:active={config.labels.cols}
+        onclick={() => toggleLabel('cols')}>Cols (A, E, J…)</button>
+    </div>
   </div>
 
   <div class="info">

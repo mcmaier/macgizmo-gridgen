@@ -14,6 +14,8 @@
  * When rails meet at corners, VCC and GND lines are continuous.
  */
 
+import { getTextStrokes, colLabel } from './font.js';
+
 // ─── Configurable constants ───────────────────────────────────────────
 /** Number of grid rows/cols used per rail (VCC + GND) */
 export const RAIL_ROWS = 2;
@@ -37,7 +39,7 @@ export const MOUNT_KEEPOUT_MARGIN = 0.5; // mm clearance around mounting hole (p
 export const MOUNT_DIAMETERS = [2.5, 3.2, 4.0];
 
 /** Mounting hole edge distance limits */
-export const MOUNT_EDGE_MIN = 3;
+export const MOUNT_EDGE_MIN = 2.5;
 export const MOUNT_EDGE_MAX = 15.0;
 
 // ─── Gerber format helpers ────────────────────────────────────────────
@@ -132,9 +134,9 @@ export function computeGrid(config) {
 
   // Center the grid on the board
   const gridLeft = (width - gridWidth) / 2;
-  const gridTop = (height - gridHeight) / 2;
+  const gridBottom = (height - gridHeight) / 2;
   const gridRight = gridLeft + (cols - 1) * pitch;
-  const gridBottom = gridTop + (rows - 1) * pitch;
+  const gridTop = gridBottom + (rows - 1) * pitch;
 
   return { gridLeft, gridTop, gridRight, gridBottom, cols, rows, margin };
 }
@@ -178,7 +180,7 @@ export function computeMinSize(pitch, powerRails, mountingHoles) {
  */
 export function generatePadPositions(config) {
   const { pitch, powerRails } = config;
-  const { gridLeft, gridTop, cols, rows } = computeGrid(config);
+  const { gridLeft, gridBottom, cols, rows } = computeGrid(config);
   const holes = computeMountingHoles(config);
 
   const pads = [];
@@ -186,7 +188,7 @@ export function generatePadPositions(config) {
   for (let col = 0; col < cols; col++) {
     for (let row = 0; row < rows; row++) {
       const x = round4(gridLeft + col * pitch);
-      const y = round4(gridTop + row * pitch);
+      const y = round4(gridBottom + row * pitch);
 
       // Skip pads inside mounting hole keepout zones
       if (isInKeepout(x, y, holes)) continue;
@@ -210,10 +212,10 @@ function classifyPad(col, row, cols, rows, rails) {
   const isRightVcc = rails.right && col === cols - 1;
   const isRightGnd = rails.right && col === cols - 2;
 
-  const isTopVcc = rails.top && row === 0;
-  const isTopGnd = rails.top && row === 1;
-  const isBottomVcc = rails.bottom && row === rows - 1;
-  const isBottomGnd = rails.bottom && row === rows - 2;
+  const isBottomVcc = rails.bottom && row === 0;
+  const isBottomGnd = rails.bottom && row === 1;
+  const isTopVcc = rails.top && row === rows - 1;
+  const isTopGnd = rails.top && row === rows - 2;
 
   const isVcc = isTopVcc || isBottomVcc || isLeftVcc || isRightVcc;
   const isGnd = isTopGnd || isBottomGnd || isLeftGnd || isRightGnd;
@@ -240,7 +242,7 @@ export function generatePowerRailTraces(config) {
   // ── Horizontal rails (top / bottom) ──
   if (rails('top')) {
     const y0 = gridTop;
-    const y1 = gridTop + pitch;
+    const y1 = gridTop - pitch;
     const gndX1 = gridLeft + (powerRails.left ? pitch : 0);
     const gndX2 = gridRight - (powerRails.right ? pitch : 0);
     rawTraces.push({ x1: gridLeft, y1: y0, x2: gridRight, y2: y0, type: 'vcc' });
@@ -249,7 +251,7 @@ export function generatePowerRailTraces(config) {
 
   if (rails('bottom')) {
     const y0 = gridBottom;
-    const y1 = gridBottom - pitch;
+    const y1 = gridBottom + pitch;
     const gndX1 = gridLeft + (powerRails.left ? pitch : 0);
     const gndX2 = gridRight - (powerRails.right ? pitch : 0);
     rawTraces.push({ x1: gridLeft, y1: y0, x2: gridRight, y2: y0, type: 'vcc' });
@@ -260,8 +262,8 @@ export function generatePowerRailTraces(config) {
   if (rails('left')) {
     const x0 = gridLeft;
     const x1g = gridLeft + pitch;
-    const gndY1 = gridTop + (powerRails.top ? pitch : 0);
-    const gndY2 = gridBottom - (powerRails.bottom ? pitch : 0);
+    const gndY1 = gridTop - (powerRails.top ? pitch : 0);
+    const gndY2 = gridBottom + (powerRails.bottom ? pitch : 0);
     rawTraces.push({ x1: x0, y1: gridTop, x2: x0, y2: gridBottom, type: 'vcc' });
     rawTraces.push({ x1: x1g, y1: gndY1, x2: x1g, y2: gndY2, type: 'gnd' });
   }
@@ -269,8 +271,8 @@ export function generatePowerRailTraces(config) {
   if (rails('right')) {
     const x0 = gridRight;
     const x1g = gridRight - pitch;
-    const gndY1 = gridTop + (powerRails.top ? pitch : 0);
-    const gndY2 = gridBottom - (powerRails.bottom ? pitch : 0);
+    const gndY1 = gridTop - (powerRails.top ? pitch : 0);
+    const gndY2 = gridBottom + (powerRails.bottom ? pitch : 0);
     rawTraces.push({ x1: x0, y1: gridTop, x2: x0, y2: gridBottom, type: 'vcc' });
     rawTraces.push({ x1: x1g, y1: gndY1, x2: x1g, y2: gndY2, type: 'gnd' });
   }
@@ -469,7 +471,7 @@ export function generateSolderMask(config, layerName = 'B.Mask') {
 
   // Mounting hole mask opening (expose copper-free area)
   if (holes.length > 0) {
-    const holeMaskDia = holes[0].diameter + maskExpansion * 2;
+    const holeMaskDia = holes[0].diameter + maskExpansion * 4;
     gerber += `%ADD30C,${holeMaskDia.toFixed(6)}*%\n`;
   }
 
@@ -491,12 +493,102 @@ export function generateSolderMask(config, layerName = 'B.Mask') {
 }
 
 export function generateSilkscreen(config) {
+  const { labels = {} } = config;
+  const strokes = generateLabelStrokes(config);
+
   let gerber = GERBER_HEADER('F.Silkscreen');
-  gerber += `%ADD10C,0.150000*%\n`;
+  gerber += `%ADD10C,0.150000*%\n`; // stroke width 0.15mm
   gerber += `D10*\n`;
+
+  for (const polyline of strokes) {
+    if (polyline.length < 2) continue;
+    // Move to first point
+    gerber += `X${fmtCoord(polyline[0].x)}Y${fmtCoord(polyline[0].y)}D02*\n`;
+    // Draw to subsequent points
+    for (let i = 1; i < polyline.length; i++) {
+      gerber += `X${fmtCoord(polyline[i].x)}Y${fmtCoord(polyline[i].y)}D01*\n`;
+    }
+  }
+
   gerber += GERBER_FOOTER;
   return gerber;
 }
+
+/** Label height in mm */
+export const LABEL_HEIGHT = 1.5;
+
+/** Label step interval (every N-th row/col gets a label) */
+export const LABEL_STEP = 5;
+
+/**
+ * Generate label strokes for silkscreen.
+ * Row labels (1, 5, 10, ...) on the left of the grid.
+ * Column labels (A, E, J, ...) above the grid.
+ * Returns array of polylines for both Gerber and SVG preview.
+ */
+export function generateLabelStrokes(config) {
+  const { labels = {}, powerRails, pitch, padDiameter = 1.0, annularRing = 0.3 } = config;
+  const { gridLeft, gridTop, gridRight, gridBottom, cols, rows } = computeGrid(config);
+  const allStrokes = [];
+  const h = LABEL_HEIGHT;
+  const copperRadius = (padDiameter + annularRing * 2) / 2;
+  // Gap = enough to clear the copper pad edge + small margin
+  const gap = copperRadius + h * 0.6;
+
+  // How many grid cols/rows are used by rails
+  const railColsLeft = powerRails.left ? RAIL_ROWS : 0;
+  const railColsRight = powerRails.right ? RAIL_ROWS : 0;
+  const railRowsTop = powerRails.top ? RAIL_ROWS : 0;
+  const railRowsBottom = powerRails.bottom ? RAIL_ROWS : 0;
+
+  // Signal grid indices
+  const sigColStart = railColsLeft;
+  const sigColEnd = cols - railColsRight - 1;
+  const sigRowStart = railRowsTop;
+  const sigRowEnd = rows - railRowsBottom - 1;
+
+  // Label step logic: label "1" always shown, then "5", "10", "15", ...
+  // sigRow is 0-based, label number is sigRow+1
+  // Show when (sigRow+1) is a multiple of LABEL_STEP, or first, or last
+  function shouldLabel(sigIndex, sigMax) {
+    if (sigIndex === 0) return true;                              // first
+    if (sigIndex === sigMax) return true;                          // last
+    if ((sigIndex + 1) % LABEL_STEP === 0) return true;           // 5, 10, 15, ...
+    return false;
+  }
+
+  // ── Row labels (left side, numbers 1-based) ──
+  // Gerber coords: Y increases upward, row 0 is at gridTop (highest Y)
+  if (labels.rows) {
+    const sigRowCount = sigRowEnd - sigRowStart;
+    for (let row = sigRowStart; row <= sigRowEnd; row++) {
+      const sigRow = row - sigRowStart;
+      if (!shouldLabel(sigRow, sigRowCount)) continue;
+      const y = gridTop - row * pitch;
+      const x = gridLeft - gap;
+      const text = String(sigRow + 1);
+      const strokes = getTextStrokes(text, x, y, h, 'right');
+      allStrokes.push(...strokes);
+    }
+  }
+
+  // ── Column labels (top side, letters A-based) ──
+  if (labels.cols) {
+    const sigColCount = sigColEnd - sigColStart;
+    for (let col = sigColStart; col <= sigColEnd; col++) {
+      const sigCol = col - sigColStart;
+      if (!shouldLabel(sigCol, sigColCount)) continue;
+      const x = gridLeft + col * pitch;
+      const y = gridTop + gap;
+      const text = colLabel(sigCol);
+      const strokes = getTextStrokes(text, x, y, h, 'center');
+      allStrokes.push(...strokes);
+    }
+  }
+
+  return allStrokes;
+}
+
 
 export function generateDrillFile(config) {
   const pads = generatePadPositions(config);

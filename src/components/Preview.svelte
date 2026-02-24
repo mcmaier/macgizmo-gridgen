@@ -1,5 +1,5 @@
 <script>
-  import { generatePadPositions, generatePowerRailTraces, computeMountingHoles, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
+  import { generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
 
   let { config } = $props();
 
@@ -10,8 +10,11 @@
   let pads = $derived(generatePadPositions(fullConfig));
   let traces = $derived(generatePowerRailTraces(fullConfig));
   let mountHoles = $derived(computeMountingHoles(fullConfig));
+  let labelStrokes = $derived(generateLabelStrokes(fullConfig));
 
-  let viewBox = $derived(`-1 -1 ${config.width + 2} ${config.height + 2}`);
+  // Extra padding for labels outside the board
+  let labelPad = $derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
+  let viewBox = $derived(`${-labelPad} ${-labelPad} ${config.width + labelPad * 2} ${config.height + labelPad * 2}`);
 
   const colors = {
     board: '#1a5c1a',
@@ -23,9 +26,20 @@
     mountRing: '#888888',
     mountHole: '#1a1a1a',
     keepout: '#0d3d0d',
+    silkscreen: '#e8e8e8',
   };
 
   let copperDia = $derived(fullConfig.padDiameter + fullConfig.annularRing * 2);
+
+  // Convert polyline to SVG path "d" string
+  function polyToPath(polyline) {
+    if (polyline.length < 2) return '';
+    let d = `M${polyline[0].x},${polyline[0].y}`;
+    for (let i = 1; i < polyline.length; i++) {
+      d += `L${polyline[i].x},${polyline[i].y}`;
+    }
+    return d;
+  }
 </script>
 
 <svg
@@ -33,6 +47,8 @@
   xmlns="http://www.w3.org/2000/svg"
   class="pcb-preview"
 >
+  <!-- Flip Y axis: Gerber Y=0 is bottom, SVG Y=0 is top -->
+  <g transform="scale(1,-1) translate(0,{-config.height})">
   <!-- PCB Board -->
   <rect
     x="0" y="0"
@@ -103,13 +119,26 @@
       fill={colors.mountHole}
     />
   {/each}
+
+  <!-- Silkscreen labels -->
+  {#each labelStrokes as polyline}
+    <path
+      d={polyToPath(polyline)}
+      stroke={colors.silkscreen}
+      stroke-width="0.15"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      fill="none"
+    />
+  {/each}
+  </g>
 </svg>
 
 <style>
   .pcb-preview {
     width: 100%;
     height: auto;
-    max-height: 500px;
+    max-height: 800px;
     border-radius: 8px;
     background: #111;
     padding: 8px;

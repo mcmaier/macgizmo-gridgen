@@ -22,6 +22,10 @@
       diameter: 3.2,       // mm
       edgeDistance: 4.0,    // mm from board edge
     },
+    labels: {
+      rows: false,          // row numbers on left
+      cols: false,          // column letters on top
+    },
   });
 
   async function handleExport() {
