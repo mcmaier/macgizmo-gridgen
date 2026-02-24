@@ -39,7 +39,7 @@ export const MOUNT_KEEPOUT_MARGIN = 0.5; // mm clearance around mounting hole (p
 export const MOUNT_DIAMETERS = [2.5, 3.2, 4.0];
 
 /** Mounting hole edge distance limits */
-export const MOUNT_EDGE_MIN = 2.5;
+export const MOUNT_EDGE_MIN = 3;
 export const MOUNT_EDGE_MAX = 15.0;
 
 // ─── Gerber format helpers ────────────────────────────────────────────
@@ -121,24 +121,42 @@ export function isInKeepout(x, y, holes) {
  * Grid extends as far as possible while staying >= 1 pitch from edges.
  */
 export function computeGrid(config) {
-  const { width, height, pitch } = config;
-  const margin = pitch; // minimum edge distance
+  const { width, height, pitch, labels = {} } = config;
+  //const margin = pitch; // minimum edge distance  
+
+  let marginCols = pitch; // minimum edge distance  
+  let marginRows = pitch;
+  let offsetCols = 0;
+  let offsetRows = 0;  
+
+  if(labels.rows)
+  {
+    marginCols += 0.5;
+    offsetCols = 1;
+  }
+
+  if(labels.cols)
+  {
+    marginRows +=  0.5;
+    offsetRows = 1;
+  }
+  
 
   // Number of columns/rows that fit
-  const cols = Math.max(0, Math.floor((width - 2 * margin) / pitch) + 1);
-  const rows = Math.max(0, Math.floor((height - 2 * margin) / pitch) + 1);
+  const cols = Math.max(0, Math.floor((width - 2 * marginCols) / pitch) + 1);
+  const rows = Math.max(0, Math.floor((height - 2 * marginRows) / pitch) + 1);
 
   // Grid extent
   const gridWidth = (cols - 1) * pitch;
   const gridHeight = (rows - 1) * pitch;
 
   // Center the grid on the board
-  const gridLeft = (width - gridWidth) / 2;
-  const gridBottom = (height - gridHeight) / 2;
+  const gridLeft = (width - gridWidth) / 2 + offsetCols;
+  const gridBottom = (height - gridHeight) / 2 - offsetRows;
   const gridRight = gridLeft + (cols - 1) * pitch;
   const gridTop = gridBottom + (rows - 1) * pitch;
 
-  return { gridLeft, gridTop, gridRight, gridBottom, cols, rows, margin };
+  return { gridLeft, gridTop, gridRight, gridBottom, cols, rows };
 }
 
 /**
@@ -163,8 +181,8 @@ export function computeMinSize(pitch, powerRails, mountingHoles) {
     const keepout = diameter + MOUNT_KEEPOUT_MARGIN * 2;
     // Need at least 2× edgeDistance + keepout so diagonal holes don't overlap
     const mountMin = edgeDistance * 2 + keepout;
-    minWidth = Math.max(minWidth, mountMin);
-    minHeight = Math.max(minHeight, mountMin);
+    minWidth = Math.max(minWidth, Math.ceil(mountMin));
+    minHeight = Math.max(minHeight, Math.ceil(mountMin));
   }
 
   return {
@@ -533,7 +551,7 @@ export function generateLabelStrokes(config) {
   const h = LABEL_HEIGHT;
   const copperRadius = (padDiameter + annularRing * 2) / 2;
   // Gap = enough to clear the copper pad edge + small margin
-  const gap = copperRadius + h * 0.6;
+  const gap = copperRadius + h * 0.8;
 
   // How many grid cols/rows are used by rails
   const railColsLeft = powerRails.left ? RAIL_ROWS : 0;

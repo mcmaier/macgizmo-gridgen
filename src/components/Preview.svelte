@@ -13,7 +13,7 @@
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
 
   // Extra padding for labels outside the board
-  let labelPad = $derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
+  let labelPad = 2;//$derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
   let viewBox = $derived(`${-labelPad} ${-labelPad} ${config.width + labelPad * 2} ${config.height + labelPad * 2}`);
 
   const colors = {
@@ -138,7 +138,7 @@
   .pcb-preview {
     width: 100%;
     height: auto;
-    max-height: 800px;
+    max-height: 900px;
     border-radius: 8px;
     background: #111;
     padding: 8px;
