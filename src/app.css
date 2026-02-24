@@ -1,0 +1,12 @@
+/* PPP Configurator base styles */
+#ppp-configurator-app,
+#app {
+  background: #1f1f1f;
+  min-height: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
