@@ -30,6 +30,16 @@ export const BOARD_MAX_WIDTH = 200;
 export const BOARD_MIN_HEIGHT = 10;
 export const BOARD_MAX_HEIGHT = 200;
 
+/** Mounting hole constants */
+export const MOUNT_KEEPOUT_MARGIN = 0.5; // mm clearance around mounting hole (per side)
+
+/** Available mounting hole diameters */
+export const MOUNT_DIAMETERS = [2.5, 3.2, 4.0];
+
+/** Mounting hole edge distance limits */
+export const MOUNT_EDGE_MIN = 3;
+export const MOUNT_EDGE_MAX = 15.0;
+
 // ─── Gerber format helpers ────────────────────────────────────────────
 
 const GERBER_HEADER = (layerName) => `G04 ProtoGrid - Parametric Prototype PCB*
@@ -50,17 +60,66 @@ function round4(val) {
   return Math.round(val * 10000) / 10000;
 }
 
+// ─── Mounting hole computation ────────────────────────────────────────
+
+/**
+ * Compute mounting hole positions based on config.
+ * Keepout radius accounts for mounting hole + clearance + half copper pad diameter.
+ * Returns array of { x, y, diameter, keepout }
+ */
+export function computeMountingHoles(config) {
+  const { width, height, mountingHoles, padDiameter = 1.0, annularRing = 0.3 } = config;
+  if (!mountingHoles || mountingHoles.mode === 'none') return [];
+
+  const { diameter, edgeDistance } = mountingHoles;
+  const copperPadRadius = (padDiameter + annularRing * 2) / 2;
+  // Keepout = mounting hole radius + clearance + full copper pad diameter
+  // so that no pad copper overlaps the hole area
+  const keepout = diameter + MOUNT_KEEPOUT_MARGIN * 2 + copperPadRadius * 2;
+  const holes = [];
+
+  const x1 = edgeDistance;
+  const y1 = edgeDistance;
+  const x2 = width - edgeDistance;
+  const y2 = height - edgeDistance;
+
+  if (mountingHoles.mode === 'diagonal') {
+    holes.push({ x: x1, y: y1, diameter, keepout });
+    holes.push({ x: x2, y: y2, diameter, keepout });
+  } else if (mountingHoles.mode === '4corners') {
+    holes.push({ x: x1, y: y1, diameter, keepout });
+    holes.push({ x: x2, y: y1, diameter, keepout });
+    holes.push({ x: x1, y: y2, diameter, keepout });
+    holes.push({ x: x2, y: y2, diameter, keepout });
+  }
+
+  return holes;
+}
+
+/**
+ * Check if a pad position collides with any mounting hole keepout zone.
+ */
+export function isInKeepout(x, y, holes) {
+  for (const h of holes) {
+    const dx = x - h.x;
+    const dy = y - h.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < h.keepout / 2) return true;
+  }
+  return false;
+}
+
 // ─── Grid computation ─────────────────────────────────────────────────
 
 /**
  * Compute the unified grid: all pad positions on a single regular grid.
  * Rails are simply the outer rows/columns of this grid.
  *
- * Grid origin: one pitch inset from each board edge.
+ * Grid origin: centered on board.
  * Grid extends as far as possible while staying >= 1 pitch from edges.
  */
 export function computeGrid(config) {
-  const { width, height, pitch, powerRails } = config;
+  const { width, height, pitch } = config;
   const margin = pitch; // minimum edge distance
 
   // Number of columns/rows that fit
@@ -70,7 +129,7 @@ export function computeGrid(config) {
   // Grid extent
   const gridWidth = (cols - 1) * pitch;
   const gridHeight = (rows - 1) * pitch;
-  
+
   // Center the grid on the board
   const gridLeft = (width - gridWidth) / 2;
   const gridTop = (height - gridHeight) / 2;
@@ -81,10 +140,10 @@ export function computeGrid(config) {
 }
 
 /**
- * Compute minimum board size based on active rails.
+ * Compute minimum board size based on active rails and mounting holes.
  * Each rail needs RAIL_ROWS grid rows/cols, plus at least 1 row/col for signal.
  */
-export function computeMinSize(pitch, powerRails) {
+export function computeMinSize(pitch, powerRails, mountingHoles) {
   const margin = pitch;
   const railCols = (powerRails.left ? RAIL_ROWS : 0) + (powerRails.right ? RAIL_ROWS : 0);
   const railRows = (powerRails.top ? RAIL_ROWS : 0) + (powerRails.bottom ? RAIL_ROWS : 0);
@@ -93,8 +152,18 @@ export function computeMinSize(pitch, powerRails) {
   const minCols = Math.max(3, railCols + 1);
   const minRows = Math.max(3, railRows + 1);
 
-  const minWidth = Math.ceil(margin * 2 + (minCols - 1) * pitch);
-  const minHeight = Math.ceil(margin * 2 + (minRows - 1) * pitch);
+  let minWidth = Math.ceil(margin * 2 + (minCols - 1) * pitch);
+  let minHeight = Math.ceil(margin * 2 + (minRows - 1) * pitch);
+
+  // Mounting holes need enough space so they don't overlap each other
+  if (mountingHoles && mountingHoles.mode !== 'none') {
+    const { diameter, edgeDistance } = mountingHoles;
+    const keepout = diameter + MOUNT_KEEPOUT_MARGIN * 2;
+    // Need at least 2× edgeDistance + keepout so diagonal holes don't overlap
+    const mountMin = edgeDistance * 2 + keepout;
+    minWidth = Math.max(minWidth, mountMin);
+    minHeight = Math.max(minHeight, mountMin);
+  }
 
   return {
     minWidth: Math.max(BOARD_MIN_WIDTH, minWidth),
@@ -104,11 +173,13 @@ export function computeMinSize(pitch, powerRails) {
 
 /**
  * Generate all pad positions with type classification.
+ * Pads inside mounting hole keepout zones are excluded.
  * Returns array of { x, y, type: 'signal'|'vcc'|'gnd' }
  */
 export function generatePadPositions(config) {
-  const { width, height, pitch, powerRails } = config;
+  const { pitch, powerRails } = config;
   const { gridLeft, gridTop, cols, rows } = computeGrid(config);
+  const holes = computeMountingHoles(config);
 
   const pads = [];
 
@@ -117,7 +188,9 @@ export function generatePadPositions(config) {
       const x = round4(gridLeft + col * pitch);
       const y = round4(gridTop + row * pitch);
 
-      // Determine pad type based on grid position
+      // Skip pads inside mounting hole keepout zones
+      if (isInKeepout(x, y, holes)) continue;
+
       const type = classifyPad(col, row, cols, rows, powerRails);
       pads.push({ x, y, type });
     }
@@ -129,8 +202,7 @@ export function generatePadPositions(config) {
 /**
  * Classify a pad based on its grid position and active rails.
  * VCC = outermost rail row/col, GND = next inward.
- * Corner pads where two rails meet: horizontal rail takes priority
- * (so the trace routing is consistent).
+ * VCC always wins over GND at intersections.
  */
 function classifyPad(col, row, cols, rows, rails) {
   const isLeftVcc = rails.left && col === 0;
@@ -154,70 +226,160 @@ function classifyPad(col, row, cols, rows, rails) {
 }
 
 /**
- * Generate power rail traces.
- * Each rail is a straight line connecting all pads of the same type.
- * Corner connections: when two rails meet, traces extend to overlap.
+ * Generate power rail traces, clipped around mounting hole keepout zones.
+ * Each rail is a straight line connecting pads of the same type.
+ * Traces that intersect keepout zones are split into segments.
  */
 export function generatePowerRailTraces(config) {
-  const { width, height, pitch, powerRails } = config;
-  const { gridLeft, gridTop, gridRight, gridBottom, cols, rows } = computeGrid(config);
+  const { powerRails, pitch } = config;
+  const { gridLeft, gridTop, gridRight, gridBottom } = computeGrid(config);
+  const holes = computeMountingHoles(config);
 
-  const traces = [];
-
-  // Helper: extend trace endpoints to connect at corners
-  // When two perpendicular rails meet, extend the trace by half a pitch
-  // so VCC connects to VCC and GND connects to GND at the corner.
+  const rawTraces = [];
 
   // ── Horizontal rails (top / bottom) ──
   if (rails('top')) {
-    const y0 = gridTop;              // VCC row
-    const y1 = gridTop + pitch;      // GND row
-    const x1 = gridLeft;
-    const x2 = gridRight;
-    const gndX1 = gridLeft    + (powerRails.left ? pitch : 0);
+    const y0 = gridTop;
+    const y1 = gridTop + pitch;
+    const gndX1 = gridLeft + (powerRails.left ? pitch : 0);
     const gndX2 = gridRight - (powerRails.right ? pitch : 0);
-    traces.push({ x1, y1: y0, x2, y2: y0, type: 'vcc' });
-    traces.push({ x1 : gndX1, y1: y1, x2: gndX2, y2: y1, type: 'gnd' });
+    rawTraces.push({ x1: gridLeft, y1: y0, x2: gridRight, y2: y0, type: 'vcc' });
+    rawTraces.push({ x1: gndX1, y1: y1, x2: gndX2, y2: y1, type: 'gnd' });
   }
 
   if (rails('bottom')) {
-    const y0 = gridBottom;           // VCC row
-    const y1 = gridBottom - pitch;   // GND row
-    const x1 = gridLeft;
-    const x2 = gridRight;
+    const y0 = gridBottom;
+    const y1 = gridBottom - pitch;
     const gndX1 = gridLeft + (powerRails.left ? pitch : 0);
     const gndX2 = gridRight - (powerRails.right ? pitch : 0);
-    traces.push({ x1, y1: y0, x2, y2: y0, type: 'vcc' });
-    traces.push({ x1 : gndX1, y1: y1, x2: gndX2, y2: y1, type: 'gnd' });
+    rawTraces.push({ x1: gridLeft, y1: y0, x2: gridRight, y2: y0, type: 'vcc' });
+    rawTraces.push({ x1: gndX1, y1: y1, x2: gndX2, y2: y1, type: 'gnd' });
   }
 
   // ── Vertical rails (left / right) ──
-  // GND col: shorten to avoid overlapping into VCC rows of perpendicular rails
   if (rails('left')) {
-    const x0 = gridLeft;             // VCC col
-    const x1 = gridLeft + pitch;     // GND col
-    const y1 = gridTop;
-    const y2 = gridBottom;
-    const gndY1 = gridTop    + (powerRails.top    ? pitch : 0);
+    const x0 = gridLeft;
+    const x1g = gridLeft + pitch;
+    const gndY1 = gridTop + (powerRails.top ? pitch : 0);
     const gndY2 = gridBottom - (powerRails.bottom ? pitch : 0);
-    traces.push({ x1: x1, y1: gndY1, x2: x1, y2: gndY2, type: 'gnd' });
-    traces.push({ x1: x0, y1, x2: x0, y2, type: 'vcc' });
+    rawTraces.push({ x1: x0, y1: gridTop, x2: x0, y2: gridBottom, type: 'vcc' });
+    rawTraces.push({ x1: x1g, y1: gndY1, x2: x1g, y2: gndY2, type: 'gnd' });
   }
 
   if (rails('right')) {
-    const x0 = gridRight;            // VCC col
-    const x1 = gridRight - pitch;    // GND col
-    const y1 = gridTop;
-    const y2 = gridBottom;
-    const gndY1 = gridTop    + (powerRails.top    ? pitch : 0);
+    const x0 = gridRight;
+    const x1g = gridRight - pitch;
+    const gndY1 = gridTop + (powerRails.top ? pitch : 0);
     const gndY2 = gridBottom - (powerRails.bottom ? pitch : 0);
-    traces.push({ x1: x1, y1: gndY1, x2: x1, y2: gndY2, type: 'gnd' });
-    traces.push({ x1: x0, y1, x2: x0, y2, type: 'vcc' });
+    rawTraces.push({ x1: x0, y1: gridTop, x2: x0, y2: gridBottom, type: 'vcc' });
+    rawTraces.push({ x1: x1g, y1: gndY1, x2: x1g, y2: gndY2, type: 'gnd' });
   }
 
-  return traces;
+  // Clip all traces around mounting hole keepout zones
+  if (holes.length === 0) return rawTraces;
+
+  const clipped = [];
+  for (const trace of rawTraces) {
+    const segments = clipTraceAroundHoles(trace, holes);
+    clipped.push(...segments);
+  }
+  return clipped;
 
   function rails(side) { return powerRails[side]; }
+}
+
+/**
+ * Clip a single trace (horizontal or vertical) around circular keepout zones.
+ * Returns an array of trace segments that don't intersect any keepout.
+ */
+function clipTraceAroundHoles(trace, holes) {
+  const { x1, y1, x2, y2, type } = trace;
+  const isHorizontal = Math.abs(y1 - y2) < 0.001;
+  const isVertical = Math.abs(x1 - x2) < 0.001;
+
+  if (!isHorizontal && !isVertical) return [trace]; // safety: only axis-aligned
+
+  if (isHorizontal) {
+    // Trace runs along Y=y1 from x1 to x2
+    const y = y1;
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
+
+    // Collect exclusion intervals [start, end] along X axis
+    const exclusions = [];
+    for (const h of holes) {
+      const dy = Math.abs(y - h.y);
+      const r = h.keepout / 2;
+      if (dy >= r) continue; // trace doesn't pass through this keepout
+      // Half-chord length at this Y distance
+      const halfChord = Math.sqrt(r * r - dy * dy);
+      const exStart = h.x - halfChord;
+      const exEnd = h.x + halfChord;
+      exclusions.push([exStart, exEnd]);
+    }
+
+    return buildSegments(minX, maxX, exclusions, (a, b) => ({
+      x1: a, y1: y, x2: b, y2: y, type
+    }));
+  } else {
+    // Vertical: trace runs along X=x1 from y1 to y2
+    const x = x1;
+    const minY = Math.min(y1, y2);
+    const maxY = Math.max(y1, y2);
+
+    const exclusions = [];
+    for (const h of holes) {
+      const dx = Math.abs(x - h.x);
+      const r = h.keepout / 2;
+      if (dx >= r) continue;
+      const halfChord = Math.sqrt(r * r - dx * dx);
+      const exStart = h.y - halfChord;
+      const exEnd = h.y + halfChord;
+      exclusions.push([exStart, exEnd]);
+    }
+
+    return buildSegments(minY, maxY, exclusions, (a, b) => ({
+      x1: x, y1: a, x2: x, y2: b, type
+    }));
+  }
+}
+
+/**
+ * Given a range [start, end] and a list of exclusion intervals,
+ * return the non-excluded segments using a builder function.
+ */
+function buildSegments(start, end, exclusions, builder) {
+  if (exclusions.length === 0) return [builder(start, end)];
+
+  // Sort exclusions by start
+  exclusions.sort((a, b) => a[0] - b[0]);
+
+  // Merge overlapping exclusions
+  const merged = [exclusions[0]];
+  for (let i = 1; i < exclusions.length; i++) {
+    const last = merged[merged.length - 1];
+    if (exclusions[i][0] <= last[1]) {
+      last[1] = Math.max(last[1], exclusions[i][1]);
+    } else {
+      merged.push(exclusions[i]);
+    }
+  }
+
+  // Build segments between exclusions
+  const segments = [];
+  let cursor = start;
+  for (const [exStart, exEnd] of merged) {
+    const segEnd = Math.max(cursor, Math.min(exStart, end));
+    if (segEnd > cursor + 0.01) {
+      segments.push(builder(cursor, segEnd));
+    }
+    cursor = Math.max(cursor, exEnd);
+  }
+  if (cursor < end - 0.01) {
+    segments.push(builder(cursor, end));
+  }
+
+  return segments;
 }
 
 /**
@@ -258,6 +420,7 @@ export function generateEdgeCuts(config) {
 export function generateCopperLayer(config, layerName = 'B.Cu') {
   const pads = generatePadPositions(config);
   const traces = generatePowerRailTraces(config);
+  const holes = computeMountingHoles(config);
   const { padDiameter, annularRing } = config;
 
   let gerber = GERBER_HEADER(layerName);
@@ -268,12 +431,20 @@ export function generateCopperLayer(config, layerName = 'B.Cu') {
   gerber += `%ADD12C,${copperPadDia.toFixed(6)}*%\n`; // GND pad
   gerber += `%ADD20C,${GERBER_RAIL_TRACE_WIDTH.toFixed(6)}*%\n`; // Rail trace
 
+  // Mounting hole keepout aperture (clear copper around holes)
+  if (holes.length > 0) {
+    const keepoutDia = holes[0].keepout;
+    gerber += `%ADD30C,${keepoutDia.toFixed(6)}*%\n`;
+  }
+
+  // Flash pads
   for (const pad of pads) {
     const aperture = pad.type === 'vcc' ? 'D11' : pad.type === 'gnd' ? 'D12' : 'D10';
     gerber += `${aperture}*\n`;
     gerber += `X${fmtCoord(pad.x)}Y${fmtCoord(pad.y)}D03*\n`;
   }
 
+  // Draw power rail traces
   if (traces.length > 0) {
     gerber += `D20*\n`;
     for (const t of traces) {
@@ -288,16 +459,31 @@ export function generateCopperLayer(config, layerName = 'B.Cu') {
 
 export function generateSolderMask(config, layerName = 'B.Mask') {
   const pads = generatePadPositions(config);
+  const holes = computeMountingHoles(config);
   const { padDiameter, annularRing, maskExpansion } = config;
 
   let gerber = GERBER_HEADER(layerName);
 
   const maskDia = padDiameter + annularRing * 2 + maskExpansion * 2;
   gerber += `%ADD10C,${maskDia.toFixed(6)}*%\n`;
-  gerber += `D10*\n`;
 
+  // Mounting hole mask opening (expose copper-free area)
+  if (holes.length > 0) {
+    const holeMaskDia = holes[0].diameter + maskExpansion * 2;
+    gerber += `%ADD30C,${holeMaskDia.toFixed(6)}*%\n`;
+  }
+
+  gerber += `D10*\n`;
   for (const pad of pads) {
     gerber += `X${fmtCoord(pad.x)}Y${fmtCoord(pad.y)}D03*\n`;
+  }
+
+  // Mask openings for mounting holes
+  if (holes.length > 0) {
+    gerber += `D30*\n`;
+    for (const h of holes) {
+      gerber += `X${fmtCoord(h.x)}Y${fmtCoord(h.y)}D03*\n`;
+    }
   }
 
   gerber += GERBER_FOOTER;
@@ -314,6 +500,7 @@ export function generateSilkscreen(config) {
 
 export function generateDrillFile(config) {
   const pads = generatePadPositions(config);
+  const holes = computeMountingHoles(config);
   const { padDiameter } = config;
 
   let drill = `; ProtoGrid - Parametric Prototype PCB\n`;
@@ -321,11 +508,26 @@ export function generateDrillFile(config) {
   drill += `M48\n`;
   drill += `METRIC,TZ\n`;
   drill += `T1C${padDiameter.toFixed(3)}\n`;
-  drill += `%\n`;
-  drill += `T1\n`;
 
+  // Separate tool for mounting holes if present
+  if (holes.length > 0) {
+    drill += `T2C${holes[0].diameter.toFixed(3)}\n`;
+  }
+
+  drill += `%\n`;
+
+  // Pad drill holes
+  drill += `T1\n`;
   for (const pad of pads) {
     drill += `X${pad.x.toFixed(3)}Y${pad.y.toFixed(3)}\n`;
+  }
+
+  // Mounting drill holes
+  if (holes.length > 0) {
+    drill += `T2\n`;
+    for (const h of holes) {
+      drill += `X${h.x.toFixed(3)}Y${h.y.toFixed(3)}\n`;
+    }
   }
 
   drill += `M30\n`;

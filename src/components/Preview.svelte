@@ -1,5 +1,5 @@
 <script>
-  import { generatePadPositions, generatePowerRailTraces, RAIL_TRACE_WIDTH } from '../lib/gerber.js';
+  import { generatePadPositions, generatePowerRailTraces, computeMountingHoles, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
 
   let { config } = $props();
 
@@ -9,6 +9,7 @@
 
   let pads = $derived(generatePadPositions(fullConfig));
   let traces = $derived(generatePowerRailTraces(fullConfig));
+  let mountHoles = $derived(computeMountingHoles(fullConfig));
 
   let viewBox = $derived(`-1 -1 ${config.width + 2} ${config.height + 2}`);
 
@@ -19,6 +20,9 @@
     padHole: '#1a1a1a',
     vcc: '#cc3333',
     gnd: '#3333cc',
+    mountRing: '#888888',
+    mountHole: '#1a1a1a',
+    keepout: '#0d3d0d',
   };
 
   let copperDia = $derived(fullConfig.padDiameter + fullConfig.annularRing * 2);
@@ -39,6 +43,17 @@
     stroke-width="0.2"
     rx="0.3"
   />
+
+  <!-- Mounting hole keepout zones (darker area, no copper) -->
+  {#each mountHoles as hole}
+    <circle
+      cx={hole.x}
+      cy={hole.y}
+      r={hole.keepout / 2}
+      fill={colors.keepout}
+      opacity="0.7"
+    />
+  {/each}
 
   <!-- Power rail traces -->
   {#each traces as t}
@@ -65,6 +80,27 @@
       cy={pad.y}
       r={fullConfig.padDiameter / 2}
       fill={colors.padHole}
+    />
+  {/each}
+
+  <!-- Mounting holes (on top of everything) -->
+  {#each mountHoles as hole}
+    <!-- Silver ring -->
+    <circle
+      cx={hole.x}
+      cy={hole.y}
+      r={hole.keepout / 2 - MOUNT_KEEPOUT_MARGIN / 2}
+      fill="none"
+      stroke={colors.mountRing}
+      stroke-width="0.3"
+      opacity="0.5"
+    />
+    <!-- Drill hole -->
+    <circle
+      cx={hole.x}
+      cy={hole.y}
+      r={hole.diameter / 2}
+      fill={colors.mountHole}
     />
   {/each}
 </svg>

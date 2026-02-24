@@ -17,6 +17,11 @@
       left: false,
       right: false,
     },
+    mountingHoles: {
+      mode: 'none',       // 'none' | 'diagonal' | '4corners'
+      diameter: 3.2,       // mm
+      edgeDistance: 4.0,    // mm from board edge
+    },
   });
 
   async function handleExport() {
@@ -29,7 +34,7 @@
 <div class="ppp-app">
   <div class="ppp-header">
     <img src={logo} alt="MacGizmo ProtoGrid" class="logo" />    
-    <span class="subtitle"><br>Parametric Prototype PCB Generator</span>
+    <span class="subtitle">Parametric Prototype PCB Generator</span>
   </div>
 
   <div class="ppp-layout">

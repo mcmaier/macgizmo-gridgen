@@ -1,9 +1,9 @@
 <script>
-  import { computeSignalGrid, computeMinSize, BOARD_MIN_WIDTH, BOARD_MAX_WIDTH, BOARD_MIN_HEIGHT, BOARD_MAX_HEIGHT } from '../lib/gerber.js';
+  import { computeSignalGrid, computeMinSize, BOARD_MIN_WIDTH, BOARD_MAX_WIDTH, BOARD_MIN_HEIGHT, BOARD_MAX_HEIGHT, MOUNT_EDGE_MIN, MOUNT_EDGE_MAX } from '../lib/gerber.js';
 
   let { config = $bindable(), onExport } = $props();
 
-  let minSize = $derived(computeMinSize(config.pitch, config.powerRails));
+  let minSize = $derived(computeMinSize(config.pitch, config.powerRails, config.mountingHoles));
   let effMinW = $derived(Math.max(BOARD_MIN_WIDTH, minSize.minWidth));
   let effMinH = $derived(Math.max(BOARD_MIN_HEIGHT, minSize.minHeight));
 
@@ -12,10 +12,12 @@
   // Text input buffers – decoupled from config so typing isn't interrupted
   let widthText = $state(String(config.width));
   let heightText = $state(String(config.height));
+  let edgeDistText = $state(String(config.mountingHoles.edgeDistance));
 
-  // Sync text buffers when config changes externally (e.g. rail toggle clamp)
+  // Sync text buffers when config changes externally
   let lastWidth = $state(config.width);
   let lastHeight = $state(config.height);
+  let lastEdgeDist = $state(config.mountingHoles.edgeDistance);
 
   $effect(() => {
     if (config.width !== lastWidth) {
@@ -26,9 +28,13 @@
       heightText = String(config.height);
       lastHeight = config.height;
     }
+    if (config.mountingHoles.edgeDistance !== lastEdgeDist) {
+      edgeDistText = String(config.mountingHoles.edgeDistance);
+      lastEdgeDist = config.mountingHoles.edgeDistance;
+    }
   });
 
-  // Clamp when rails change
+  // Clamp when rails or mounting holes change
   $effect(() => {
     const cw = clamp(config.width, effMinW, BOARD_MAX_WIDTH);
     const ch = clamp(config.height, effMinH, BOARD_MAX_HEIGHT);
@@ -53,6 +59,12 @@
     lastHeight = config.height;
   }
 
+  function onSliderEdgeDist(e) {
+    config.mountingHoles = { ...config.mountingHoles, edgeDistance: +e.target.value };
+    edgeDistText = String(config.mountingHoles.edgeDistance);
+    lastEdgeDist = config.mountingHoles.edgeDistance;
+  }
+
   // Text input: free typing, commit on blur or Enter
   function commitWidth() {
     const v = parseInt(widthText, 10);
@@ -68,6 +80,14 @@
     lastHeight = config.height;
   }
 
+  function commitEdgeDist() {
+    const v = parseFloat(edgeDistText);
+    const clamped = isNaN(v) ? 4.0 : clamp(v, MOUNT_EDGE_MIN, MOUNT_EDGE_MAX);
+    config.mountingHoles = { ...config.mountingHoles, edgeDistance: clamped };
+    edgeDistText = String(clamped);
+    lastEdgeDist = clamped;
+  }
+
   function onKeydown(e, commitFn) {
     if (e.key === 'Enter') {
       commitFn();
@@ -80,6 +100,14 @@
       ...config.powerRails,
       [side]: !config.powerRails[side],
     };
+  }
+
+  function setMountMode(mode) {
+    config.mountingHoles = { ...config.mountingHoles, mode };
+  }
+
+  function setMountDiameter(e) {
+    config.mountingHoles = { ...config.mountingHoles, diameter: +e.target.value };
   }
 </script>
 
@@ -138,6 +166,43 @@
       <button class="rail-btn" class:active={config.powerRails.right}
         onclick={() => toggleRail('right')}>Right</button>
     </div>
+  </div>
+
+  <div class="control-group">
+    <h3>Mounting Holes</h3>
+    <div class="rail-toggles triple">
+      <button class="rail-btn" class:active={config.mountingHoles.mode === 'none'}
+        onclick={() => setMountMode('none')}>Off</button>
+      <button class="rail-btn" class:active={config.mountingHoles.mode === 'diagonal'}
+        onclick={() => setMountMode('diagonal')}>2× Diagonal</button>
+      <button class="rail-btn" class:active={config.mountingHoles.mode === '4corners'}
+        onclick={() => setMountMode('4corners')}>4× Corners</button>
+    </div>
+
+    {#if config.mountingHoles.mode !== 'none'}
+      <label>
+        Diameter
+        <select value={config.mountingHoles.diameter} onchange={setMountDiameter}>
+          <option value={2.5}>2.5 mm</option>
+          <option value={3.2}>3.2 mm (M3)</option>
+          <option value={4.0}>4.0 mm</option>
+        </select>
+      </label>
+
+      <div class="slider-field">
+        <span class="slider-label">Edge Distance (mm)</span>
+        <div class="slider-row">
+          <input type="range" class="slider"
+            min={MOUNT_EDGE_MIN} max={MOUNT_EDGE_MAX} step="0.5"
+            value={config.mountingHoles.edgeDistance}
+            oninput={onSliderEdgeDist} />
+          <input type="text" class="slider-text"
+            bind:value={edgeDistText}
+            onblur={commitEdgeDist}
+            onkeydown={(e) => onKeydown(e, commitEdgeDist)} />
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="info">
@@ -216,6 +281,7 @@
   .slider-text:focus { outline: none; border-color: #89b4fa; }
 
   .rail-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .rail-toggles.triple { grid-template-columns: 1fr 1fr 1fr; }
 
   .rail-btn {
     padding: 8px; background: #313244; border: 1px solid #45475a;
