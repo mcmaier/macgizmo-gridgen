@@ -3,7 +3,6 @@
   import Preview from './components/Preview.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
-  import logo from './assets/protogrid.png';
 
   let config = $state({
     width: 50,
@@ -37,7 +36,6 @@
 
 <div class="ppp-app">
   <div class="ppp-header">
-    <img src={logo} alt="MacGizmo ProtoGrid" class="logo" />    
     <span class="subtitle">Parametric Prototype PCB Generator</span>
   </div>
 
@@ -80,11 +78,6 @@
     color: #fcfaf9;
   }
   
-  .logo {
-    height: 72px;
-    width: auto;
-  }
-
   .ppp-layout {
     display: grid;
     grid-template-columns: 280px 1fr;
@@ -98,7 +91,8 @@
   }
 
   .ppp-main {
-    min-height: 300px;
+    min-height: 300px;   
+    max-width: 100vw; 
   }
 
   .ppp-footer {
