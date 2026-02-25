@@ -23,8 +23,8 @@
       edgeDistance: 4.0,    // mm from board edge
     },
     labels: {
-      rows: false,          // row numbers on left
-      cols: false,          // column letters on top
+      rows: 0,          // row numbers on left
+      cols: 0,          // column letters on top
     },
   });
 
@@ -51,17 +51,20 @@
   </div>
 
   <div class="ppp-footer">
-    <span>Gerber RS-274X + Excellon Drill · Ready for JLCPCB, PCBWay, Aisler,...</span>
+    <span>ProtoGrid - Parametric Prototype PCB Generator - Powered by macgizmo.com</span>
   </div>
 </div>
 
 <style>
+  :root {
+    background: #1f1f1f;
+  }
+
   .ppp-app {
-    max-width: 900px;
-    margin: 0 auto;
+    width: 100%;
     padding: 20px;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    color: #fcfaf9;
+    color: #fcfaf9;    
   }
 
   .ppp-header {
@@ -101,7 +104,7 @@
   .ppp-footer {
     margin-top: 16px;
     padding: 10px;
-    text-align: center;
+    text-align: left;
     font-size: 12px;
     color: #6c9fb2;
   }
@@ -109,6 +112,10 @@
   @media (max-width: 640px) {
     .ppp-layout {
       grid-template-columns: 1fr;
+    }
+
+    .ppp-sidebar {
+      position: static;
     }
   }
 </style>

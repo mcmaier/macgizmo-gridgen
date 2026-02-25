@@ -110,11 +110,22 @@
     config.mountingHoles = { ...config.mountingHoles, diameter: +e.target.value };
   }
 
-  function toggleLabel(which) {
-    config.labels = {
-      ...config.labels,
-      [which]: !config.labels[which],
-    };
+  const LABEL_STEPS = [0, 1, 2, 5]; // off → every → every 2nd → every 5th
+
+  function cycleLabelStep(which) {
+    const current = config.labels[which];
+    const idx = LABEL_STEPS.indexOf(current);
+    const next = LABEL_STEPS[(idx + 1) % LABEL_STEPS.length];
+    config.labels = { ...config.labels, [which]: next };
+  }
+
+  function labelButtonText(which) {
+    const step = config.labels[which];
+    const prefix = which === 'rows' ? 'Rows' : 'Cols';
+    if (step === 0) return `${prefix}: Off`;
+    if (step === 1) return `${prefix}: All`;
+    if (step === 2) return `${prefix}: ×2`;
+    return `${prefix}: ×${step}`;  
   }
 </script>
 
@@ -215,10 +226,10 @@
   <div class="control-group">
     <h3>Labels (Silkscreen)</h3>
     <div class="rail-toggles">
-      <button class="rail-btn" class:active={config.labels.rows}
-        onclick={() => toggleLabel('rows')}>Rows (1, 5, 10…)</button>
-      <button class="rail-btn" class:active={config.labels.cols}
-        onclick={() => toggleLabel('cols')}>Cols (A, E, J…)</button>
+      <button class="rail-btn" class:active={config.labels.rows > 0}
+        onclick={() => cycleLabelStep('rows')}>{labelButtonText('rows')}</button>
+      <button class="rail-btn" class:active={config.labels.cols > 0}
+        onclick={() => cycleLabelStep('cols')}>{labelButtonText('cols')}</button>
     </div>
   </div>
 
@@ -231,9 +242,14 @@
     <div class="warning">Board too small for signal pads with current rails.</div>
   {/if}
 
+  <div class="download-hint">
+    <span>Gerber RS-274X + Excellon Drill<br>Ready for JLCPCB, PCBWay, Aisler,...</span>
+  </div>  
+
   <button class="export-btn" onclick={onExport} disabled={sigGrid.total === 0}>
-    ⬇ Download Gerber ZIP
+    Download Gerber ZIP ⬇ 
   </button>
+  
 </div>
 
 <style>
@@ -327,4 +343,11 @@
   }
   .export-btn:hover { background: #c49800; }
   .export-btn:disabled { background: #585b70; cursor: not-allowed; }
+
+  .download-hint {
+    padding: 4px;
+    text-align: left;
+    font-size: 14px;
+    color: #6c9fb2;
+  }
 </style>

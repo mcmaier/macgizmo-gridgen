@@ -138,7 +138,7 @@
   .pcb-preview {
     width: 100%;
     height: auto;
-    max-height: 900px;
+    max-height: 800px;
     border-radius: 8px;
     background: #111;
     padding: 8px;

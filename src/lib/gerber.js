@@ -27,7 +27,7 @@ export const RAIL_TRACE_WIDTH = 0.8;
 export const GERBER_RAIL_TRACE_WIDTH = 0.8;
 
 /** Board size constraints (mm) */
-export const BOARD_MIN_WIDTH = 10;
+export const BOARD_MIN_WIDTH = 20;
 export const BOARD_MAX_WIDTH = 200;
 export const BOARD_MIN_HEIGHT = 10;
 export const BOARD_MAX_HEIGHT = 200;
@@ -41,6 +41,11 @@ export const MOUNT_DIAMETERS = [2.5, 3.2, 4.0];
 /** Mounting hole edge distance limits */
 export const MOUNT_EDGE_MIN = 3;
 export const MOUNT_EDGE_MAX = 15.0;
+
+/** Label height in mm */
+export const LABEL_HEIGHT = 1;
+/** Label step interval (every N-th row/col gets a label) */
+export const LABEL_STEP = 5;
 
 // ─── Gerber format helpers ────────────────────────────────────────────
 
@@ -124,27 +129,27 @@ export function computeGrid(config) {
   const { width, height, pitch, labels = {} } = config;
   //const margin = pitch; // minimum edge distance  
 
-  let marginCols = pitch; // minimum edge distance  
-  let marginRows = pitch;
+  let marginCols = pitch + 0.5; // minimum edge distance  
+  let marginRows = pitch + 0.5;
   let offsetCols = 0;
   let offsetRows = 0;  
 
   if(labels.rows)
   {
-    marginCols += 0.5;
-    offsetCols = 1;
+    //marginCols += 0.5;
+    offsetCols = 0.2;
   }
 
   if(labels.cols)
   {
-    marginRows +=  0.5;
-    offsetRows = 1;
+    marginRows +=  0.25;
+    offsetRows = 0.2;
   }
   
 
   // Number of columns/rows that fit
-  const cols = Math.max(0, Math.floor((width - 2 * marginCols) / pitch) + 1);
-  const rows = Math.max(0, Math.floor((height - 2 * marginRows) / pitch) + 1);
+  const cols = Math.max(0, Math.floor((width - 2 * marginCols) / pitch + 1));
+  const rows = Math.max(0, Math.floor((height - 2 * marginRows) / pitch + 1));
 
   // Grid extent
   const gridWidth = (cols - 1) * pitch;
@@ -532,11 +537,6 @@ export function generateSilkscreen(config) {
   return gerber;
 }
 
-/** Label height in mm */
-export const LABEL_HEIGHT = 1.5;
-
-/** Label step interval (every N-th row/col gets a label) */
-export const LABEL_STEP = 5;
 
 /**
  * Generate label strokes for silkscreen.
@@ -547,11 +547,15 @@ export const LABEL_STEP = 5;
 export function generateLabelStrokes(config) {
   const { labels = {}, powerRails, pitch, padDiameter = 1.0, annularRing = 0.3 } = config;
   const { gridLeft, gridTop, gridRight, gridBottom, cols, rows } = computeGrid(config);
+  const holes = computeMountingHoles(config);
   const allStrokes = [];
   const h = LABEL_HEIGHT;
   const copperRadius = (padDiameter + annularRing * 2) / 2;
   // Gap = enough to clear the copper pad edge + small margin
   const gap = copperRadius + h * 0.8;
+
+  // Tick mark size (small dot for unlabeled rows/cols)
+  const tickR = 0.2;  // radius of tick dot
 
   // How many grid cols/rows are used by rails
   const railColsLeft = powerRails.left ? RAIL_ROWS : 0;
@@ -565,43 +569,99 @@ export function generateLabelStrokes(config) {
   const sigRowStart = railRowsTop;
   const sigRowEnd = rows - railRowsBottom - 1;
 
-  // Label step logic: label "1" always shown, then "5", "10", "15", ...
-  // sigRow is 0-based, label number is sigRow+1
-  // Show when (sigRow+1) is a multiple of LABEL_STEP, or first, or last
-  function shouldLabel(sigIndex, sigMax) {
+  // Label step logic: label "1" always shown, then based on step value
+  // step=1: every row/col, step=2: every 2nd, step=5: every 5th
+  // sigIndex is 0-based, label number is sigIndex+1
+
+  function shouldLabel(sigIndex, sigMax, step) {
+    if (step <= 1) return true;                                   // label every one
     if (sigIndex === 0) return true;                              // first
-    if (sigIndex === sigMax) return true;                          // last
-    if ((sigIndex + 1) % LABEL_STEP === 0) return true;           // 5, 10, 15, ...
+    if (sigIndex === sigMax) return true;                         // last
+    if ((sigIndex + 1) % step === 0) return true;           // 5, 10, 15, ...
     return false;
+  }
+  
+  /**
+   * Check if a label at (x, y) with given size would overlap a mounting hole keepout.
+   * Uses a conservative rectangular bounding box for the label.
+   */
+  function labelOverlapsHole(x, y) {
+    // Check center point and nearby points against keepout
+    return isInKeepout(x, y, holes);
+  }
+
+  /**
+   * Generate a small cross/tick mark as a polyline pair.
+   */
+  function tickMark(x, y) {
+    return [
+      [{ x: x - tickR, y }, { x: x + tickR, y }],
+      [{ x, y: y - tickR }, { x, y: y + tickR }],
+    ];
   }
 
   // ── Row labels (left side, numbers 1-based) ──
   // Gerber coords: Y increases upward, row 0 is at gridTop (highest Y)
-  if (labels.rows) {
+  const rowStep = labels.rows || 0;
+  if (rowStep > 0) {
     const sigRowCount = sigRowEnd - sigRowStart;
     for (let row = sigRowStart; row <= sigRowEnd; row++) {
       const sigRow = row - sigRowStart;
-      if (!shouldLabel(sigRow, sigRowCount)) continue;
       const y = gridTop - row * pitch;
       const x = gridLeft - gap;
-      const text = String(sigRow + 1);
-      const strokes = getTextStrokes(text, x, y, h, 'right');
-      allStrokes.push(...strokes);
-    }
+
+      if (shouldLabel(sigRow, sigRowCount, rowStep)) {
+        // Full text label – skip if overlapping mounting hole
+        if (!labelOverlapsHole(x, y)) {
+          const text = String(sigRow + 1);
+          const strokes = getTextStrokes(text, x, y, h, 'right');
+          allStrokes.push(...strokes);
+                  }
+        } else if (rowStep > 1) {
+        // Tick mark for intermediate rows (only when not labeling every row)
+            const tx = gridLeft - gap;
+            if (!labelOverlapsHole(tx, y)) {
+              allStrokes.push(...tickMark(tx, y));
+            }
+          }
+      }
   }
 
   // ── Column labels (top side, letters A-based) ──
-  if (labels.cols) {
+  const colStep = labels.cols || 0;
+  if (colStep > 0) {
     const sigColCount = sigColEnd - sigColStart;
     for (let col = sigColStart; col <= sigColEnd; col++) {
       const sigCol = col - sigColStart;
-      if (!shouldLabel(sigCol, sigColCount)) continue;
       const x = gridLeft + col * pitch;
       const y = gridTop + gap;
+
+      if (shouldLabel(sigCol, sigColCount, colStep)) {
+        // Full text label – skip if overlapping mounting hole
+        if (!labelOverlapsHole(x, y)) {
       const text = colLabel(sigCol);
       const strokes = getTextStrokes(text, x, y, h, 'center');
       allStrokes.push(...strokes);
+              }
+      } else if (colStep > 1) {
+        // Tick mark for intermediate columns (only when not labeling every col)
+        const ty = gridTop + gap;
+        if (!labelOverlapsHole(x, ty)) {
+          allStrokes.push(...tickMark(x, ty));
+        }
+      }
     }
+  }
+
+  // ── Branding (bottom-right, always shown) ──
+  const brandText = 'MACGIZMO PROTOGRID';
+  const brandH = LABEL_HEIGHT;  
+  const brandX = (gridRight - gridLeft) / 2 - 2.5;
+  const brandY = gridBottom - gap * 1.25;
+  const brandStrokes = getTextStrokes(brandText, brandX, brandY, brandH, 'left');
+  // Only add if text fits within board boundaries
+  if (brandY + brandH / 2 < config.height) {
+    allStrokes.push(...brandStrokes);
   }
 
   return allStrokes;
