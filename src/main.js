@@ -4,7 +4,7 @@ import App from './App.svelte'
 
 // Mount to WordPress target or dev fallback
 const target =
-  document.getElementById('protogrid-app') ||
+  document.getElementById('macgizmo-gridgen') ||
   document.getElementById('app')
 
 const app = mount(App, { target })

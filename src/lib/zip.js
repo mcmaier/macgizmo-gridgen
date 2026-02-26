@@ -5,7 +5,7 @@
 
 import JSZip from 'jszip';
 
-export async function downloadAsZip(files, zipName = 'ProtoGrid-Gerber.zip') {
+export async function downloadAsZip(files, zipName = 'GridGenGizmo-Gerber.zip') {
   const zip = new JSZip();
 
   for (const [name, content] of Object.entries(files)) {

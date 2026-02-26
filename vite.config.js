@@ -8,7 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: 'src/main.js',
       output: {
-        entryFileNames: 'protogrid.js',
+        entryFileNames: 'macgizmo-gridgen.js',
         format: 'iife',
       },
     },

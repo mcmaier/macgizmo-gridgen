@@ -29,7 +29,7 @@
 
   async function handleExport() {
     const files = generateAllFiles(config);
-    const name = `ProtoGrid-${config.width}x${config.height}-${config.pitch}mm.zip`;
+    const name = `MacGizmoGrid-${config.width}x${config.height}-${config.pitch}mm.zip`;
     await downloadAsZip(files, name);
   }
 </script>
@@ -49,7 +49,7 @@
   </div>
 
   <div class="ppp-footer">
-    <span>ProtoGrid - Parametric Prototype PCB Generator - Powered by macgizmo.com</span>
+    <span>MacGizmo GridGen - Parametric Prototype PCB Generator - Powered by macgizmo.com</span>
   </div>
 </div>
 

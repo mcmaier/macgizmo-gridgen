@@ -1,5 +1,5 @@
 /**
- * ProtoGrid Stroke Font
+ * MacGizmo GridGen Stroke Font
  * Minimal vector font for PCB silkscreen labels.
  * 
  * Each character is defined as an array of strokes.
