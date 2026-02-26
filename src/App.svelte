@@ -31,6 +31,8 @@
     const files = generateAllFiles(config);
     const name = `MacGizmoGrid-${config.width}x${config.height}-${config.pitch}mm.zip`;
     await downloadAsZip(files, name);
+
+    if (typeof gridgenTrack === 'function') gridgenTrack('gerber_export');
   }
 </script>
 
