@@ -239,7 +239,7 @@
   </div>
 
   {#if sigGrid.total === 0}
-    <div class="warning">Board too small for signal pads with current rails.</div>
+    <div class="warning">Board has no signal pads!</div>
   {/if}
 
   <div class="download-hint">

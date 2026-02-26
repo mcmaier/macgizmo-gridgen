@@ -27,7 +27,7 @@ export const RAIL_TRACE_WIDTH = 0.8;
 export const GERBER_RAIL_TRACE_WIDTH = 0.8;
 
 /** Board size constraints (mm) */
-export const BOARD_MIN_WIDTH = 20;
+export const BOARD_MIN_WIDTH = 15;
 export const BOARD_MAX_WIDTH = 200;
 export const BOARD_MIN_HEIGHT = 10;
 export const BOARD_MAX_HEIGHT = 200;
@@ -142,7 +142,7 @@ export function computeGrid(config) {
 
   if(labels.cols)
   {
-    marginRows +=  0.25;
+    marginRows +=  0.2;
     offsetRows = 0.2;
   }
   
@@ -420,7 +420,11 @@ export function computeSignalGrid(config) {
   const sigCols = Math.max(0, cols - railCols);
   const sigRows = Math.max(0, rows - railRows);
 
-  return { cols: sigCols, rows: sigRows, total: sigCols * sigRows };
+  const pads = generatePadPositions(config);
+  const signalPads = pads.filter(p => p.type === 'signal').length;
+
+  return { cols: sigCols, rows: sigRows, total: signalPads };
+
 }
 
 // ─── Gerber file generators ───────────────────────────────────────────
@@ -653,16 +657,81 @@ export function generateLabelStrokes(config) {
     }
   }
 
+  // ── Branding (bottom-right, shifted if holes block) ──
+  const brandText = 'MACGIZMO GRIDGEN';
+  const brandH = LABEL_HEIGHT;
+  const scale = brandH / 5;
+  const charWidth = 3 * scale;
+  const charGap = 1 * scale;
+  const brandWidth = brandText.length * charWidth + (brandText.length - 1) * charGap;
+
+  // Desired position: right-aligned at gridRight, below grid
+  let brandX = gridRight + gap;
+  let brandY = gridBottom - gap;
+
+  // Find if any hole blocks the branding area
+  // Check along the text extent (right-aligned, so text runs from brandX-brandWidth to brandX)
+  function brandBlocked(bx, by) {
+    // Sample several points along the text
+    const textLeft = bx - brandWidth;
+    for (let sx = textLeft; sx <= bx; sx += charWidth) {
+      if (isInKeepout(sx, by, holes)) return true;
+    }
+    return false;
+  }
+
+  let brandPlaced = false;
+
+  // Attempt 1: default position (bottom-right)
+  if (brandY + brandH / 2 < config.height && !brandBlocked(brandX, brandY)) {
+    brandPlaced = true;
+  }
+
+  // Attempt 2: shift left to clear bottom-right hole
+  if (!brandPlaced) {
+    // Find the leftmost keepout edge at brandY height
+    for (const h of holes) {
+      const dy = Math.abs(brandY - h.y);
+      const r = h.keepout / 2;
+      if (dy < r) {
+        const shiftedX = h.x - r - gap;
+        if (shiftedX - brandWidth > 0 && !brandBlocked(shiftedX, brandY)) {
+          brandX = shiftedX;
+          brandPlaced = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // Attempt 3: move to bottom-left (left-aligned)
+  if (!brandPlaced) {
+    const altX = gridLeft - gap;
+    const altY = brandY;
+    if (altY + brandH / 2 < config.height && altX + brandWidth < config.width) {
+      if (!brandBlocked(altX + brandWidth, altY)) {
+        brandX = altX + brandWidth;
+        brandPlaced = true;
+      }
+    }
+  }
+
+  if (brandPlaced) {
+    const brandStrokes = getTextStrokes(brandText, brandX, brandY, brandH, 'right');
+    allStrokes.push(...brandStrokes);
+  }
+
+ /*
   // ── Branding (bottom-right, always shown) ──
   const brandText = 'MACGIZMO GRIDGEN';
   const brandH = LABEL_HEIGHT;  
-  const brandX = (gridRight - gridLeft) / 2 - 2.2;
-  const brandY = gridBottom - gap * 1.25;
-  const brandStrokes = getTextStrokes(brandText, brandX, brandY, brandH, 'left');
+  const brandX = gridRight + gap;
+  const brandY = gridBottom - gap;
+  const brandStrokes = getTextStrokes(brandText, brandX, brandY, brandH, 'right');
   // Only add if text fits within board boundaries
   if (brandY + brandH / 2 < config.height) {
     allStrokes.push(...brandStrokes);
-  }
+  }*/
 
   return allStrokes;
 }
