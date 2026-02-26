@@ -51,7 +51,7 @@
   </div>
 
   <div class="ppp-footer">
-    <span>MacGizmo GridGen - Parametric Prototype PCB Generator - Powered by macgizmo.com</span>
+    <span>MacGizmo GridGen - Parametric Prototype PCB Generator v{__APP_VERSION__} Beta - Powered by macgizmo.com</span>
   </div>
 </div>
 
