@@ -1,5 +1,5 @@
 <script>
-  import { generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
+  import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
   import { MODULE_LIBRARY, getModulePins } from '../lib/modules.js';
 
   let { config, modules = $bindable() } = $props();
@@ -12,6 +12,7 @@
   let traces = $derived(generatePowerRailTraces(fullConfig));
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
+  let grid = $derived(computeGrid(fullConfig));
 
   // Extra padding for labels outside the board
   let labelPad = 2;//$derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
@@ -50,9 +51,9 @@
     const def = MODULE_LIBRARY.find(m => m.id === inst.moduleId);
     if (!def) return null;
     const pitch = config.pitch;
-    // Module origin is the first pin position
-    const x = grid.gridLeft + inst.col * pitch;
-    const y = grid.gridBottom + inst.row * pitch;
+    const x = grid.gridLeft + (inst.col || 0) * pitch;
+    const y = grid.gridBottom + (inst.row || 0) * pitch;
+    if (isNaN(x) || isNaN(y)) return null;
     return { x, y, def, pitch };
   }
 

@@ -2,42 +2,39 @@
   import { MODULE_LIBRARY } from '../lib/modules.js';
 
   let { modules = $bindable(), config } = $props();
-
   let selectedModuleId = $state('');
 
   // Group modules by category
-  let categories = $derived(() => {
-    const cats = {};
-    for (const m of MODULE_LIBRARY) {
-      if (!cats[m.category]) cats[m.category] = [];
-      cats[m.category].push(m);
-    }
-    return cats;
-  });
+const categories = Object.groupBy
+  ? Object.groupBy(MODULE_LIBRARY, m => m.category)
+  : MODULE_LIBRARY.reduce((cats, m) => {
+      (cats[m.category] ??= []).push(m);
+      return cats;
+    }, {});
+function addModule() {
+  if (!selectedModuleId) return;
+  const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
+  if (!def) return;
 
-  function addModule() {
-    if (!selectedModuleId) return;
-    const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
-    if (!def) return;
+  // Grid size calculation (inline, avoids $state proxy issues with computeGrid)
+  const pitch = config.pitch;
+  const margin = pitch + 0.5;
+  const cols = Math.max(0, Math.floor((config.width - 2 * margin) / pitch + 1));
+  const rows = Math.max(0, Math.floor((config.height - 2 * margin) / pitch + 1));
 
-    // Default placement: centered on the board, snapped to grid
-    const pitch = config.pitch;
-    const centerCol = Math.round((config.width / 2) / pitch);
-    const centerRow = Math.round((config.height / 2) / pitch);
-    
-    // Offset so module center is roughly at board center
-    const col = Math.max(0, centerCol - Math.floor(def.widthPins / 2));
-    const row = Math.max(0, centerRow - Math.floor(def.heightPins / 2));
+  // Center module on the grid
+  const col = Math.max(0, Math.floor((cols - def.widthPins) / 2));
+  const row = Math.max(0, Math.floor((rows - def.heightPins) / 2));
 
-    modules = [...modules, {
-      id: crypto.randomUUID(),
-      moduleId: selectedModuleId,
-      name: def.name,
-      col,
-      row,
-      color: def.color,
-    }];
-  }
+  modules = [...modules, {
+    id: crypto.randomUUID(),
+    moduleId: selectedModuleId,
+    name: def.name,
+    col,
+    row,
+    color: def.color,
+  }];
+}
 
   function removeModule(instanceId) {
     modules = modules.filter(m => m.id !== instanceId);
@@ -48,7 +45,7 @@
   <div class="toolbar-row">
     <select class="module-select" bind:value={selectedModuleId}>
       <option value="">Module Preview...</option>
-      {#each Object.entries(categories()) as [cat, mods]}
+      {#each Object.entries(categories) as [cat, mods]}
         <optgroup label={cat}>
           {#each mods as mod}
             <option value={mod.id}>{mod.name}</option>
