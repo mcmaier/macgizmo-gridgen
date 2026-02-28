@@ -1,6 +1,6 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
-  import { MODULE_LIBRARY, getModulePins } from '../lib/modules.js';
+  import { MODULE_LIBRARY, getRotatedModule } from '../lib/modules.js';
 
   let { config, modules = $bindable() } = $props();
 
@@ -48,13 +48,13 @@
 
   /** Convert module grid position to board mm coordinates */
   function moduleToMm(inst) {
-    const def = MODULE_LIBRARY.find(m => m.id === inst.moduleId);
-    if (!def) return null;
+    const rm = getRotatedModule(inst.moduleId, inst.rotation || 0);
+    if (!rm) return null;
     const pitch = config.pitch;
     const x = grid.gridLeft + (inst.col || 0) * pitch;
     const y = grid.gridBottom + (inst.row || 0) * pitch;
     if (isNaN(x) || isNaN(y)) return null;
-    return { x, y, def, pitch };
+    return { x, y, rm, pitch };
   }
 
   // ── Drag handling ──
@@ -208,13 +208,15 @@
   {#each modules as inst (inst.id)}
     {@const m = moduleToMm(inst)}
     {#if m}
-      {@const pins = getModulePins(inst.moduleId)}
-      {@const outW = m.def.outline.width}
-      {@const outH = m.def.outline.height}
-      {@const pinW = (m.def.widthPins - 1) * m.pitch}
-      {@const pinH = (m.def.heightPins - 1) * m.pitch}
-      {@const ofsX = (outW - pinW) / 2}
-      {@const ofsY = (outH - pinH) / 2}
+      {@const outW = m.rm.outline.width}
+      {@const outH = m.rm.outline.height}
+      {@const pinW = (m.rm.widthPins - 1) * m.pitch}
+      {@const pinH = (m.rm.heightPins - 1) * m.pitch}
+      {@const oOfs = m.rm.outlineOffset || { x: 0, y: 0 }}
+      {@const ofsX = (outW - pinW) / 2 - oOfs.x}
+      {@const ofsY = (outH - pinH) / 2 - oOfs.y}
+      {@const outCx = m.x - ofsX + outW / 2}
+      {@const outCy = m.y - ofsY + outH / 2}
 
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g
@@ -238,7 +240,7 @@
         />
 
         <!-- Pin markers -->
-        {#each pins as pin}
+        {#each m.rm.pins as pin}
           <circle
             cx={m.x + pin.col * m.pitch}
             cy={m.y + pin.row * m.pitch}
@@ -250,8 +252,8 @@
           />
         {/each}
 
-        <!-- Module label (flipped back so text reads correctly) -->
-        <g transform="translate({m.x + pinW / 2},{m.y + pinH / 2}) scale(1,-1)">
+        <!-- Module label centered on outline (flipped back for readability) -->
+        <g transform="translate({outCx},{outCy}) scale(1,-1)">
           <text
             x="0"
             y="0"
@@ -259,10 +261,10 @@
             dominant-baseline="central"
             fill={inst.color}
             fill-opacity="0.8"
-            font-size="{Math.min(2.5, pinW * 0.15)}"
+            font-size="{Math.min(2.5, outW * 0.1)}"
             font-family="'Segoe UI', system-ui, sans-serif"
             font-weight="600"
-          >{m.def.name}</text>
+          >{m.rm.name}</text>
         </g>
       </g>
     {/if}

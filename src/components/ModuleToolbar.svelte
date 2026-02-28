@@ -4,13 +4,35 @@
   let { modules = $bindable(), config } = $props();
   let selectedModuleId = $state('');
 
-  // Group modules by category
-const categories = Object.groupBy
-  ? Object.groupBy(MODULE_LIBRARY, m => m.category)
-  : MODULE_LIBRARY.reduce((cats, m) => {
+  // Filter modules by current grid pitch and group by category
+  let categories = $derived.by(() => {
+    const matching = MODULE_LIBRARY.filter(m => m.pitch === config.pitch);
+    const cats = {};
+    for (const m of matching) {
       (cats[m.category] ??= []).push(m);
-      return cats;
-    }, {});
+    }
+    return cats;
+  });
+
+      // Reset selection when pitch changes and it no longer matches
+  $effect(() => {
+    if (selectedModuleId) {
+      const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
+      if (def && def.pitch !== config.pitch) {
+        selectedModuleId = '';
+      }
+    }
+  });
+
+  // Remove placed modules that don't match the new pitch
+  $effect(() => {
+    const pitch = config.pitch;
+    const validIds = new Set(MODULE_LIBRARY.filter(m => m.pitch === pitch).map(m => m.id));
+    const filtered = modules.filter(m => validIds.has(m.moduleId));
+    if (filtered.length !== modules.length) {
+      modules = filtered;
+    }
+  });
 function addModule() {
   if (!selectedModuleId) return;
   const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
@@ -32,9 +54,18 @@ function addModule() {
     name: def.name,
     col,
     row,
+    rotation: 0,
     color: def.color,
   }];
 }
+
+  function rotateModule(instanceId) {
+    modules = modules.map(m =>
+      m.id === instanceId
+        ? { ...m, rotation: ((m.rotation || 0) + 1) % 4 }
+        : m
+    );
+  }
 
   function removeModule(instanceId) {
     modules = modules.filter(m => m.id !== instanceId);
@@ -52,6 +83,9 @@ function addModule() {
           {/each}
         </optgroup>
       {/each}
+      {#if Object.keys(categories).length === 0}
+        <option value="" disabled>No modules for {config.pitch}mm pitch</option>
+      {/if}
     </select>
 
     <button class="place-btn" onclick={addModule} disabled={!selectedModuleId}>
@@ -68,10 +102,12 @@ function addModule() {
       {#each modules as inst (inst.id)}
         <span class="placed-tag" style="border-color: {inst.color}">
           {inst.name}
-          <button class="remove-btn" onclick={() => removeModule(inst.id)}>×</button>
+          <button class="rotate-btn" onclick={() => rotateModule(inst.id)} title="Rotate 90°">↻</button>
+          <button class="remove-btn" onclick={() => removeModule(inst.id)} title="Remove">×</button>
         </span>
       {/each}
     </div>
+    <span class="module-hint">⚠ Module overlays are approximate size references only. Verify dimensions before ordering.</span>
   {/if}
 </div>
 
@@ -148,6 +184,24 @@ function addModule() {
     border-radius: 4px;
     color: #cdd6f4;
     font-size: 12px;
+  }
+
+    .rotate-btn {
+    background: none;
+    border: none;
+    color: #89b4fa;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .rotate-btn:hover { color: #74a8f7; }
+
+    .module-hint {
+    font-size: 11px;
+    color: #7f849c;
+    font-style: italic;
   }
 
   .remove-btn {

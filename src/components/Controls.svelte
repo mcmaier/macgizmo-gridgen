@@ -264,13 +264,13 @@
 
     <div class="order-section">
     <h3>Order PCB</h3>
-    <span class="order-hint">Go to manufacturer & upload your Gerber file</span>
+    <span class="order-hint">Go to any manufacturer <br>& upload your generated Gerber file</span>
     <div class="order-buttons">
       {#each manufacturers as mfr}
         <button class="order-btn"
           disabled={sigGrid.total === 0}
           onclick={() => handleOrderAt(mfr)}>
-          {mfr.label} ↗
+          {mfr.label}
         </button>
       {/each}
     </div>

@@ -50,7 +50,7 @@
     </aside>
     <main class="ppp-main">
       <ModuleToolbar bind:modules {config} />
-      <Preview {config} {modules} />
+      <Preview {config} bind:modules />
     </main>
   </div>
 
