@@ -196,25 +196,25 @@ export const ADAPTER_LIBRARY = [
       { col: 0, row: 1, label: '2' },
       { col: 0, row: 2, label: '3' },
       { col: 0, row: 3, label: '4' },
-      { col: 2, row: 3, label: '5' },
-      { col: 2, row: 2, label: '6' },
-      { col: 2, row: 1, label: '7' },
-      { col: 2, row: 0, label: '8' },
+      { col: 3, row: 3, label: '5' },
+      { col: 3, row: 2, label: '6' },
+      { col: 3, row: 1, label: '7' },
+      { col: 3, row: 0, label: '8' },
     ],
 
     features: {
       copper: [
         // SOIC-8 SMD pads (1.27mm pitch, 0.65mm wide, 1.5mm long)
         // Left side: pins 1-4
-        { type: 'pad', x: 0.8, y: 0.0, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 0.8, y: 1.27, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 0.8, y: 2.54, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 0.8, y: 3.81, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2, y: 1.905, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2, y: 3.175, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2, y: 4.445, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2, y: 5.715, w: 1.5, h: 0.6 },
         // Right side: pins 5-8 (mirrored, 5 at bottom)
-        { type: 'pad', x: 4.28, y: 3.81, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 4.28, y: 2.54, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 4.28, y: 1.27, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 4.28, y: 0.0, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.48, y: 5.715, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.48, y: 4.445, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.48, y: 3.175, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.48, y: 1.905, w: 1.5, h: 0.6 },
 
         // Traces: SMD → through-hole (direct horizontal routes)
         // Left side: pins 1-4 → col 0

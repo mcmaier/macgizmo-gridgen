@@ -206,7 +206,7 @@ export function generatePadPositions(config, placedAdapters = []) {
   const { gridLeft, gridBottom, cols, rows } = computeGrid(config);
   const holes = computeMountingHoles(config);
 
-    // Build set of grid positions occupied by adapter through-holes
+  // Build set of grid positions occupied by adapter through-holes
   const adapterOccupied = new Set();
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;

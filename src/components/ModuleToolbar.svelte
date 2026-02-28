@@ -124,27 +124,7 @@ function addModule() {
 </script>
 
 <div class="module-toolbar">
-<!-- Module Preview section -->
-  <div class="section-label">📐 Module Preview</div>
-  <div class="toolbar-row">
-    <select class="module-select" bind:value={selectedModuleId}>
-      <option value="">Select module...</option>
-      {#each Object.entries(moduleCategories) as [cat, mods]}
-        <optgroup label={cat}>
-          {#each mods as mod}
-            <option value={mod.id}>{mod.name}</option>
-          {/each}
-        </optgroup>
-      {/each}
-      {#if Object.keys(moduleCategories).length === 0}
-        <option value="" disabled>No modules for {config.pitch}mm pitch</option>
-      {/if}
-    </select>
-    <button class="place-btn" onclick={addModule} disabled={!selectedModuleId}>Place ↓</button>
-  </div>
-
   <!-- Adapter section -->
-  <div class="section-divider"></div>
   <div class="section-label">⚡ SMD Adapter <span class="section-hint">— included in Gerber export</span></div>
   <div class="toolbar-row">
     <select class="module-select adapter-select" bind:value={selectedAdapterId}>
@@ -163,22 +143,42 @@ function addModule() {
     <button class="place-btn adapter-place-btn" onclick={addAdapter} disabled={!selectedAdapterId}>Place ↓</button>
   </div>
 
+  <!-- Module Preview section -->
+  <div class="section-divider"></div>
+  <div class="section-label">📐 Module Preview<span class="section-hint">— only for size estimation</span></div>
+  <div class="toolbar-row">
+    <select class="module-select" bind:value={selectedModuleId}>
+      <option value="">Select module...</option>
+      {#each Object.entries(moduleCategories) as [cat, mods]}
+        <optgroup label={cat}>
+          {#each mods as mod}
+            <option value={mod.id}>{mod.name}</option>
+          {/each}
+        </optgroup>
+      {/each}
+      {#if Object.keys(moduleCategories).length === 0}
+        <option value="" disabled>No modules for {config.pitch}mm pitch</option>
+      {/if}
+    </select>
+    <button class="place-btn" onclick={addModule} disabled={!selectedModuleId}>Place ↓</button>
+  </div>
+
   <!-- Placed items -->
   {#if modules.length > 0 || adapters.length > 0}
     <div class="section-divider"></div>
     <div class="placed-list">
-      {#each modules as inst (inst.id)}
-        <span class="placed-tag" style="border-color: {inst.color}">
-          {inst.name}
-          <button class="rotate-btn" onclick={() => rotateModule(inst.id)} title="Rotate 90°">↻</button>
-          <button class="remove-btn" onclick={() => removeModule(inst.id)} title="Remove">×</button>
-        </span>
-      {/each}
       {#each adapters as inst (inst.id)}
         <span class="placed-tag adapter-tag" style="border-color: {inst.color}">
           ⚡ {inst.name}
           <button class="rotate-btn" onclick={() => rotateAdapter(inst.id)} title="Rotate 90°">↻</button>
           <button class="remove-btn" onclick={() => removeAdapter(inst.id)} title="Remove">×</button>
+        </span>
+      {/each}
+      {#each modules as inst (inst.id)}
+        <span class="placed-tag" style="border-color: {inst.color}">
+          {inst.name}
+          <button class="rotate-btn" onclick={() => rotateModule(inst.id)} title="Rotate 90°">↻</button>
+          <button class="remove-btn" onclick={() => removeModule(inst.id)} title="Remove">×</button>
         </span>
       {/each}
     </div>
