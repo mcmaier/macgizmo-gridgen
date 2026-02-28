@@ -201,10 +201,20 @@ export function computeMinSize(pitch, powerRails, mountingHoles) {
  * Pads inside mounting hole keepout zones are excluded.
  * Returns array of { x, y, type: 'signal'|'vcc'|'gnd' }
  */
-export function generatePadPositions(config) {
+export function generatePadPositions(config, placedAdapters = []) {
   const { pitch, powerRails } = config;
   const { gridLeft, gridBottom, cols, rows } = computeGrid(config);
   const holes = computeMountingHoles(config);
+
+    // Build set of grid positions occupied by adapter through-holes
+  const adapterOccupied = new Set();
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    for (const pin of adapter.throughPins) {
+      adapterOccupied.add(`${inst.col + pin.col},${inst.row + pin.row}`);
+    }
+  }
 
   const pads = [];
 
@@ -215,6 +225,9 @@ export function generatePadPositions(config) {
 
       // Skip pads inside mounting hole keepout zones
       if (isInKeepout(x, y, holes)) continue;
+      
+      // Skip pads occupied by adapter through-holes
+      if (adapterOccupied.has(`${col},${row}`)) continue;
 
       const type = classifyPad(col, row, cols, rows, powerRails);
       pads.push({ x, y, type });
@@ -446,11 +459,12 @@ export function generateEdgeCuts(config) {
   return gerber;
 }
 
-export function generateCopperLayer(config, layerName = 'B.Cu') {
-  const pads = generatePadPositions(config);
+export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters = []) {
+  const pads = generatePadPositions(config, placedAdapters);
   const traces = generatePowerRailTraces(config);
   const holes = computeMountingHoles(config);
-  const { padDiameter, annularRing } = config;
+  const { padDiameter, annularRing, pitch } = config;
+  const { gridLeft, gridBottom } = computeGrid(config);
 
   let gerber = GERBER_HEADER(layerName);
 
@@ -466,7 +480,58 @@ export function generateCopperLayer(config, layerName = 'B.Cu') {
     gerber += `%ADD30C,${keepoutDia.toFixed(6)}*%\n`;
   }
 
-  // Flash pads
+  // Collect adapter copper features with unique apertures (starting D40)
+  const adapterFeatures = [];
+  const rectApertures = new Map();
+  let nextAperture = 40;
+
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    const originX = gridLeft + inst.col * pitch;
+    const originY = gridBottom + inst.row * pitch;
+
+    for (const f of adapter.features.copper) {
+      if (f.type === 'pad') {
+        const key = `${f.w.toFixed(4)},${f.h.toFixed(4)}`;
+        if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);        
+        adapterFeatures.push({
+          type: 'pad', x: originX + f.x, y: originY + f.y,
+          aperture: rectApertures.get(key),
+        });
+      } else if (f.type === 'trace') {
+        const key = `T${f.w.toFixed(4)}`;
+        if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+         adapterFeatures.push({
+          type: 'trace',
+          x1: originX + f.x1, y1: originY + f.y1,
+          x2: originX + f.x2, y2: originY + f.y2,
+          aperture: rectApertures.get(key),
+        });
+      }
+    }
+
+    // Through-hole pads at adapter pin positions
+    for (const pin of adapter.throughPins) {
+      adapterFeatures.push({
+        type: 'th',
+        x: gridLeft + (inst.col + pin.col) * pitch,
+        y: gridBottom + (inst.row + pin.row) * pitch,
+      });
+    }
+  }
+
+  // Define adapter apertures
+  for (const [key, num] of rectApertures) {
+    if (key.startsWith('T')) {
+      gerber += `%ADD${num}C,${parseFloat(key.substring(1)).toFixed(6)}*%\n`;
+    } else {
+      const [w, h] = key.split(',').map(Number);
+      gerber += `%ADD${num}R,${w.toFixed(6)}X${h.toFixed(6)}*%\n`;
+    }
+  }
+
+  // Flash grid pads
   for (const pad of pads) {
     const aperture = pad.type === 'vcc' ? 'D11' : pad.type === 'gnd' ? 'D12' : 'D10';
     gerber += `${aperture}*\n`;
@@ -482,14 +547,30 @@ export function generateCopperLayer(config, layerName = 'B.Cu') {
     }
   }
 
+  // Flash adapter features
+  for (const f of adapterFeatures) {
+    if (f.type === 'pad') {
+      gerber += `D${f.aperture}*\n`;
+      gerber += `X${fmtCoord(f.x)}Y${fmtCoord(f.y)}D03*\n`;
+    } else if (f.type === 'trace') {
+      gerber += `D${f.aperture}*\n`;
+      gerber += `X${fmtCoord(f.x1)}Y${fmtCoord(f.y1)}D02*\n`;
+      gerber += `X${fmtCoord(f.x2)}Y${fmtCoord(f.y2)}D01*\n`;
+    } else if (f.type === 'th') {
+      gerber += `D10*\n`;
+      gerber += `X${fmtCoord(f.x)}Y${fmtCoord(f.y)}D03*\n`;
+    }
+  }
+
   gerber += GERBER_FOOTER;
   return gerber;
 }
 
-export function generateSolderMask(config, layerName = 'B.Mask') {
-  const pads = generatePadPositions(config);
+export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters = []) {
+  const pads = generatePadPositions(config, placedAdapters);
   const holes = computeMountingHoles(config);
-  const { padDiameter, annularRing, maskExpansion } = config;
+  const { padDiameter, annularRing, maskExpansion, pitch } = config;
+  const { gridLeft, gridBottom } = computeGrid(config);
 
   let gerber = GERBER_HEADER(layerName);
 
@@ -502,12 +583,43 @@ export function generateSolderMask(config, layerName = 'B.Mask') {
     gerber += `%ADD30C,${holeMaskDia.toFixed(6)}*%\n`;
   }
 
+  // Collect adapter mask apertures
+  const rectApertures = new Map();
+  let nextAperture = 40;
+  const adapterMask = [];
+
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    const originX = gridLeft + inst.col * pitch;
+    const originY = gridBottom + inst.row * pitch;
+
+    for (const f of adapter.features.mask) {
+      if (f.type === 'pad') {
+        const key = `${f.w.toFixed(4)},${f.h.toFixed(4)}`;
+        if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+        adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
+      }
+    }
+    for (const pin of adapter.throughPins) {
+      adapterMask.push({
+        x: gridLeft + (inst.col + pin.col) * pitch,
+        y: gridBottom + (inst.row + pin.row) * pitch,
+        aperture: 10,
+      });
+      }
+    }
+
+  for (const [key, num] of rectApertures) {
+    const [w, h] = key.split(',').map(Number);
+    gerber += `%ADD${num}R,${w.toFixed(6)}X${h.toFixed(6)}*%\n`;
+  }
+
   gerber += `D10*\n`;
   for (const pad of pads) {
     gerber += `X${fmtCoord(pad.x)}Y${fmtCoord(pad.y)}D03*\n`;
   }
 
-  // Mask openings for mounting holes
   if (holes.length > 0) {
     gerber += `D30*\n`;
     for (const h of holes) {
@@ -515,12 +627,18 @@ export function generateSolderMask(config, layerName = 'B.Mask') {
     }
   }
 
+  for (const f of adapterMask) {
+    gerber += `D${f.aperture}*\n`;
+    gerber += `X${fmtCoord(f.x)}Y${fmtCoord(f.y)}D03*\n`;
+  }
+
   gerber += GERBER_FOOTER;
   return gerber;
 }
 
-export function generateSilkscreen(config) {
-  const { labels = {} } = config;
+export function generateSilkscreen(config, placedAdapters = []) {
+  const { labels = {}, pitch } = config;
+  const { gridLeft, gridBottom } = computeGrid(config);
   const strokes = generateLabelStrokes(config);
 
   let gerber = GERBER_HEADER('F.Silkscreen');
@@ -534,6 +652,28 @@ export function generateSilkscreen(config) {
     // Draw to subsequent points
     for (let i = 1; i < polyline.length; i++) {
       gerber += `X${fmtCoord(polyline[i].x)}Y${fmtCoord(polyline[i].y)}D01*\n`;
+    }
+  }
+  
+  // Adapter silkscreen features
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    const originX = gridLeft + inst.col * pitch;
+    const originY = gridBottom + inst.row * pitch;
+
+    for (const f of adapter.features.silk) {
+      if (f.type === 'poly') {
+        const pts = f.points;
+        if (pts.length < 2) continue;
+        gerber += `X${fmtCoord(originX + pts[0].x)}Y${fmtCoord(originY + pts[0].y)}D02*\n`;
+        for (let i = 1; i < pts.length; i++) {
+          gerber += `X${fmtCoord(originX + pts[i].x)}Y${fmtCoord(originY + pts[i].y)}D01*\n`;
+        }
+      } else if (f.type === 'circle') {
+        // Approximate small circle as flash
+        gerber += `X${fmtCoord(originX + f.x)}Y${fmtCoord(originY + f.y)}D03*\n`;
+      }
     }
   }
 
@@ -737,10 +877,11 @@ export function generateLabelStrokes(config) {
 }
 
 
-export function generateDrillFile(config) {
-  const pads = generatePadPositions(config);
+export function generateDrillFile(config, placedAdapters = []) {
+  const pads = generatePadPositions(config, placedAdapters);
   const holes = computeMountingHoles(config);
-  const { padDiameter } = config;
+  const { padDiameter, pitch } = config;
+  const { gridLeft, gridBottom } = computeGrid(config);
 
   let drill = `; MacGizmo GridGen - Parametric Prototype PCB\n`;
   drill += `; Drill file - Excellon format\n`;
@@ -755,10 +896,21 @@ export function generateDrillFile(config) {
 
   drill += `%\n`;
 
-  // Pad drill holes
+  // Pad drill holes (grid pads, adapter TH pads excluded from grid)
   drill += `T1\n`;
   for (const pad of pads) {
     drill += `X${pad.x.toFixed(3)}Y${pad.y.toFixed(3)}\n`;
+  }
+  
+  // Adapter through-hole drill positions (same diameter as grid pads)
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    for (const pin of adapter.throughPins) {
+      const px = gridLeft + (inst.col + pin.col) * pitch;
+      const py = gridBottom + (inst.row + pin.row) * pitch;
+      drill += `X${px.toFixed(3)}Y${py.toFixed(3)}\n`;
+    }
   }
 
   // Mounting drill holes
@@ -774,9 +926,11 @@ export function generateDrillFile(config) {
 }
 
 /**
- * Generate complete Gerber file set
+ * Generate complete Gerber file set.
+ * @param {Object} config - Board configuration
+ * @param {Array} placedAdapters - Array of placed adapter instances with _adapterDef attached
  */
-export function generateAllFiles(config) {
+export function generateAllFiles(config, placedAdapters = []) {
   const cfg = {
     maskExpansion: 0.05,
     ...config,
@@ -784,11 +938,11 @@ export function generateAllFiles(config) {
 
   return {
     'MacGizmoGrid-Edge_Cuts.gbr': generateEdgeCuts(cfg),
-    'MacGizmoGrid-B_Cu.gbr': generateCopperLayer(cfg, 'B.Cu'),
-    'MacGizmoGrid-F_Cu.gbr': generateCopperLayer(cfg, 'F.Cu'),
-    'MacGizmoGrid-B_Mask.gbr': generateSolderMask(cfg, 'B.Mask'),
-    'MacGizmoGrid-F_Mask.gbr': generateSolderMask(cfg, 'F.Mask'),
-    'MacGizmoGrid-F_Silkscreen.gbr': generateSilkscreen(cfg),
-    'MacGizmoGrid.drl': generateDrillFile(cfg),
+    'MacGizmoGrid-B_Cu.gbr': generateCopperLayer(cfg, 'B.Cu', placedAdapters),
+    'MacGizmoGrid-F_Cu.gbr': generateCopperLayer(cfg, 'F.Cu', placedAdapters),
+    'MacGizmoGrid-B_Mask.gbr': generateSolderMask(cfg, 'B.Mask', placedAdapters),
+    'MacGizmoGrid-F_Mask.gbr': generateSolderMask(cfg, 'F.Mask', placedAdapters),
+    'MacGizmoGrid-F_Silkscreen.gbr': generateSilkscreen(cfg, placedAdapters),
+    'MacGizmoGrid.drl': generateDrillFile(cfg, placedAdapters),
   };
 }

@@ -1,14 +1,21 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
   import { MODULE_LIBRARY, getRotatedModule } from '../lib/modules.js';
-
-  let { config, modules = $bindable() } = $props();
+  import { ADAPTER_LIBRARY } from '../lib/adapters.js';
+  
+  let { config, modules = $bindable(), adapters = $bindable() } = $props();
 
   let fullConfig = $derived({
     ...config,
   });
 
-  let pads = $derived(generatePadPositions(fullConfig));
+    // Resolve adapter definitions for pad suppression
+  let resolvedAdapters = $derived(adapters.map(inst => ({
+    ...inst,
+    _adapterDef: ADAPTER_LIBRARY.find(a => a.id === inst.adapterId),
+  })));
+
+  let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
   let traces = $derived(generatePowerRailTraces(fullConfig));
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
@@ -57,9 +64,20 @@
     return { x, y, rm, pitch };
   }
 
-  // ── Drag handling ──
+    /** Convert adapter grid position to board mm and get its features */
+  function adapterToMm(inst) {
+    const def = ADAPTER_LIBRARY.find(a => a.id === inst.adapterId);
+    if (!def) return null;
+    const pitch = config.pitch;
+    const x = grid.gridLeft + (inst.col || 0) * pitch;
+    const y = grid.gridBottom + (inst.row || 0) * pitch;
+    if (isNaN(x) || isNaN(y)) return null;
+    return { x, y, def, pitch };
+  }
+
+  // ── Drag handling (supports both modules and adapters) ──
   let svgEl = $state(null);
-  let dragging = $state(null); // { instanceId, startCol, startRow, startMouseX, startMouseY }
+  let dragging = $state(null); // { instanceId, kind: 'module'|'adapter', startCol, startRow, startX, startY }
 
   function getSvgPoint(e) {
     if (!svgEl) return { x: 0, y: 0 };
@@ -74,17 +92,18 @@
     return { x: svgPt.x, y: config.height - svgPt.y };
   }
 
-    // Block browser scroll/zoom while dragging a module
+    // Block browser scroll/zoom while dragging
   function onTouchMove(e) {
     if (dragging) e.preventDefault();
   }
 
-  function onModulePointerDown(e, inst) {
+  function onItemPointerDown(e, inst, kind) {
     e.preventDefault();
     e.stopPropagation();
     const pt = getSvgPoint(e);
     dragging = {
       instanceId: inst.id,
+      kind,
       startCol: inst.col,
       startRow: inst.row,
       startX: pt.x,
@@ -105,11 +124,19 @@
     const newCol = dragging.startCol + dCols;
     const newRow = dragging.startRow + dRows;
 
-    modules = modules.map(m =>
-      m.id === dragging.instanceId
-        ? { ...m, col: newCol, row: newRow }
-        : m
-    );
+    if (dragging.kind === 'module') {
+      modules = modules.map(m =>
+        m.id === dragging.instanceId
+          ? { ...m, col: newCol, row: newRow }
+          : m
+      );
+    } else {
+      adapters = adapters.map(a =>
+        a.id === dragging.instanceId
+          ? { ...a, col: newCol, row: newRow }
+          : a
+      );
+    }
   }
 
   function onPointerUp() {
@@ -125,7 +152,7 @@
   viewBox={viewBox}
   xmlns="http://www.w3.org/2000/svg"
   class="pcb-preview"
-  class:has-modules={modules.length > 0}
+  class:has-modules={modules.length > 0 || adapters.length > 0}
 >
   <!-- Flip Y axis: Gerber Y=0 is bottom, SVG Y=0 is top -->
   <g transform="scale(1,-1) translate(0,{-config.height})">
@@ -210,6 +237,54 @@
       stroke-linejoin="round"
       fill="none"
     />
+     {/each}
+
+  <!-- Adapter overlays (real Gerber features) -->
+  {#each adapters as inst (inst.id)}
+    {@const a = adapterToMm(inst)}
+    {#if a}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <g class="module-overlay adapter-overlay"
+        class:dragging={dragging?.instanceId === inst.id}
+        onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
+        style="cursor: grab;">
+
+        {#each a.def.features.copper as f}
+          {#if f.type === 'pad'}
+            <rect x={a.x + f.x - f.w / 2} y={a.y + f.y - f.h / 2}
+              width={f.w} height={f.h} fill="#c8a84e" fill-opacity="0.8" />
+          {:else if f.type === 'trace'}
+            <line x1={a.x + f.x1} y1={a.y + f.y1} x2={a.x + f.x2} y2={a.y + f.y2}
+              stroke="#c8a84e" stroke-width={f.w} stroke-opacity="0.7" stroke-linecap="round" />
+          {/if}
+        {/each}
+
+        {#each a.def.throughPins as pin}
+          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
+            r={copperDia / 2} fill="#c8a84e" />
+          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
+            r={config.padDiameter / 2} fill="#1a1a1a" />
+        {/each}
+
+        {#each a.def.features.silk as f}
+          {#if f.type === 'poly'}
+            <path d={polyToPath(f.points.map(p => ({ x: a.x + p.x, y: a.y + p.y })))}
+              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+              stroke-linejoin="round" fill="none" opacity="0.7" />
+          {:else if f.type === 'circle'}
+            <circle cx={a.x + f.x} cy={a.y + f.y} r={f.d / 2} fill="#e8e8e8" opacity="0.7" />
+          {/if}
+        {/each}
+
+        <g transform="translate({a.x + (a.def.widthPins - 1) * a.pitch / 2},{a.y + (a.def.heightPins - 1) * a.pitch / 2 + a.def.outline.height * 0.4}) scale(1,-1)">
+          <text x="0" y="0" text-anchor="middle" dominant-baseline="central"
+            fill="#f9e2af" fill-opacity="0.9"
+            font-size="{Math.min(1.8, a.def.outline.width * 0.08)}"
+            font-family="'Segoe UI', system-ui, sans-serif"
+            font-weight="600">⚡ {a.def.name}</text>
+        </g>
+      </g>
+    {/if}
   {/each}
   
   <!-- Module overlays -->
@@ -230,7 +305,7 @@
       <g
         class="module-overlay"
         class:dragging={dragging?.instanceId === inst.id}
-        onpointerdown={(e) => onModulePointerDown(e, inst)}
+        onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
         style="cursor: grab;"
       >
         <!-- Module body outline -->
@@ -306,5 +381,9 @@
   .module-overlay.dragging rect {
     fill-opacity: 0.35;
     stroke-dasharray: none;
+  }
+  
+  .adapter-overlay:hover rect {
+    fill-opacity: 0.9;
   }
 </style>

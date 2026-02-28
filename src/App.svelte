@@ -4,6 +4,7 @@
     import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
+    import { ADAPTER_LIBRARY } from './lib/adapters.js';
 
   let config = $state({
     width: 50,
@@ -29,9 +30,16 @@
   });
 
   let modules = $state([]);
+  let adapters = $state([]);
 
   async function handleExport() {
-    const files = generateAllFiles(config);
+        // Attach adapter definitions for Gerber generation
+    const resolvedAdapters = adapters.map(inst => ({
+      ...inst,
+      _adapterDef: ADAPTER_LIBRARY.find(a => a.id === inst.adapterId),
+    }));
+
+    const files = generateAllFiles(config, resolvedAdapters);
     const name = `MacGizmoGrid-${config.width}x${config.height}-${config.pitch}mm.zip`;
     await downloadAsZip(files, name);
 
@@ -49,8 +57,8 @@
       <Controls bind:config onExport={handleExport} />
     </aside>
     <main class="ppp-main">
-      <ModuleToolbar bind:modules {config} />
-      <Preview {config} bind:modules />
+      <ModuleToolbar bind:modules bind:adapters {config} />
+      <Preview {config} bind:modules bind:adapters />
     </main>
   </div>
 
