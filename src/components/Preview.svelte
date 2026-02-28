@@ -74,6 +74,11 @@
     return { x: svgPt.x, y: config.height - svgPt.y };
   }
 
+    // Block browser scroll/zoom while dragging a module
+  function onTouchMove(e) {
+    if (dragging) e.preventDefault();
+  }
+
   function onModulePointerDown(e, inst) {
     e.preventDefault();
     e.stopPropagation();
@@ -87,6 +92,7 @@
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
   }
 
   function onPointerMove(e) {
@@ -110,6 +116,7 @@
     dragging = null;
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('touchmove', onTouchMove);
   }
 </script>
 
@@ -118,6 +125,7 @@
   viewBox={viewBox}
   xmlns="http://www.w3.org/2000/svg"
   class="pcb-preview"
+  class:has-modules={modules.length > 0}
 >
   <!-- Flip Y axis: Gerber Y=0 is bottom, SVG Y=0 is top -->
   <g transform="scale(1,-1) translate(0,{-config.height})">
@@ -280,6 +288,10 @@
     border-radius: 8px;
     background: #111;
     padding: 8px;
+  }
+  
+    .pcb-preview.has-modules {
+    touch-action: pan-x pan-y;
   }
   
   .module-overlay {
