@@ -1,6 +1,7 @@
 <script>
   import Controls from './components/Controls.svelte';
   import Preview from './components/Preview.svelte';
+    import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
 
@@ -27,6 +28,8 @@
     },
   });
 
+  let modules = $state([]);
+
   async function handleExport() {
     const files = generateAllFiles(config);
     const name = `MacGizmoGrid-${config.width}x${config.height}-${config.pitch}mm.zip`;
@@ -46,7 +49,8 @@
       <Controls bind:config onExport={handleExport} />
     </aside>
     <main class="ppp-main">
-      <Preview {config} />
+      <ModuleToolbar bind:modules {config} />
+      <Preview {config} bind:modules />
     </main>
   </div>
 
@@ -93,6 +97,9 @@
   }
 
   .ppp-main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     min-height: 300px;   
     max-width: 100vw; 
   }
