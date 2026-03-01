@@ -56,28 +56,29 @@ export const ADAPTER_LIBRARY = [
         // SMD pads for SOT-23 (1.0 x 0.6 mm pads)
         // Centered at x=1.27 (between col 0 and col 2)
         // Pin 1 (left-bottom): pad at left side, bottom
-        { type: 'pad', x: 0.57, y: -0.475, w: 1.0, h: 0.6 },
+        { type: 'pad', x: 1.84, y: 0.795, w: 1.0, h: 0.6 },
         // Pin 2 (left-top): pad at left side, top
-        { type: 'pad', x: 0.57, y: 0.475, w: 1.0, h: 0.6 },
+        { type: 'pad', x: 1.84, y: 1.745, w: 1.0, h: 0.6 },
         // Pin 3 (right): pad at right side, center
-        { type: 'pad', x: 1.97, y: 0.0, w: 1.0, h: 0.6 },
+        { type: 'pad', x: 3.24, y: 1.27, w: 1.0, h: 0.6 },
 
         // Traces from SMD pads to through-hole pads (0.3mm width)
         // Pin 1 SMD → TH pin 1 (col 0, row 0)
-        { type: 'trace', x1: 0.57, y1: -0.475, x2: 0, y2: -0.475, w: 0.3 },
-        { type: 'trace', x1: 0, y1: -0.475, x2: 0, y2: 0, w: 0.3 },
+        { type: 'trace', x1: 1.84, y1: 0.795, x2: 1.5, y2: 0.795, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 0.795, x2: 0, y2: 0, w: 0.3 },
         // Pin 2 SMD → TH pin 2 (col 0, row 1 = y+2.54)
-        { type: 'trace', x1: 0.57, y1: 0.475, x2: 0, y2: 0.475, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 0.475, x2: 0, y2: 2.54, w: 0.3 },
+        { type: 'trace', x1: 1.84, y1: 1.745, x2: 1.5, y2: 1.745, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 1.745, x2: 0, y2: 2.54, w: 0.3 },
         // Pin 3 SMD → TH pin 3 (col 2, row 0 = x+5.08)
-        { type: 'trace', x1: 1.97, y1: 0.0, x2: 5.08, y2: 0.0, w: 0.3 },
+        { type: 'trace', x1: 3.24, y1: 1.27, x2: 3.54, y2: 1.27, w: 0.3 },
+        { type: 'trace', x1: 3.54, y1: 1.27, x2: 5.08, y2: 0.0, w: 0.3 },
       ],
 
       // Mask openings match SMD pads with 0.05mm expansion
       mask: [
-        { type: 'pad', x: 0.57, y: -0.475, w: 1.1, h: 0.7 },
-        { type: 'pad', x: 0.57, y: 0.475, w: 1.1, h: 0.7 },
-        { type: 'pad', x: 1.97, y: 0.0, w: 1.1, h: 0.7 },
+        { type: 'pad', x: 1.84, y: 0.795, w: 1.1, h: 0.7 },
+        { type: 'pad', x: 1.84, y: 1.745, w: 1.1, h: 0.7 },
+        { type: 'pad', x: 3.24, y: 1.27, w: 1.1, h: 0.7 },
       ],
 
       // Silkscreen: component body outline
@@ -85,15 +86,15 @@ export const ADAPTER_LIBRARY = [
         {
           type: 'poly',
           points: [
-            { x: 0.0, y: -0.95 },
-            { x: 2.54, y: -0.95 },
-            { x: 2.54, y: 0.95 },
-            { x: 0.0, y: 0.95 },
-            { x: 0.0, y: -0.95 },
+            { x: 1.09, y: 0.32 },
+            { x: 3.99, y: 0.32 },
+            { x: 3.99, y: 2.22 },
+            { x: 1.09, y: 2.22 },
+            { x: 1.09, y: 0.32 },
           ],
         },
         // Pin 1 marker dot
-        { type: 'circle', x: 0.25, y: -0.65, d: 0.2 },
+        { type: 'circle', x: 1.34, y: 2.42, d: 0.2 },
       ],
     },
 
@@ -129,51 +130,50 @@ export const ADAPTER_LIBRARY = [
       copper: [
         // SOT-23-5 SMD pads (0.95mm pitch between pins on each side)
         // Left side: pins 1, 2, 3
-        { type: 'pad', x: 0.57, y: -0.95, w: 1.0, h: 0.55 },
-        { type: 'pad', x: 0.57, y: 0.0, w: 1.0, h: 0.55 },
-        { type: 'pad', x: 0.57, y: 0.95, w: 1.0, h: 0.55 },
+        { type: 'pad', x: 1.84, y: 1.59, w: 1.0, h: 0.55 },
+        { type: 'pad', x: 1.84, y: 2.54, w: 1.0, h: 0.55 },
+        { type: 'pad', x: 1.84, y: 3.49, w: 1.0, h: 0.55 },
         // Right side: pins 5, 4 (top to bottom on right)
-        { type: 'pad', x: 1.97, y: -0.95, w: 1.0, h: 0.55 },
-        { type: 'pad', x: 1.97, y: 0.95, w: 1.0, h: 0.55 },
+        { type: 'pad', x: 3.24, y: 1.59, w: 1.0, h: 0.55 },
+        { type: 'pad', x: 3.24, y: 3.49, w: 1.0, h: 0.55 },
 
         // Traces: SMD → through-hole
         // Pin 1 → col 0, row 0
-        { type: 'trace', x1: 0.57, y1: -0.95, x2: 0, y2: -0.95, w: 0.3 },
-        { type: 'trace', x1: 0, y1: -0.95, x2: 0, y2: 0, w: 0.3 },
+        { type: 'trace', x1: 1.84, y1: 1.59, x2: 1.5, y2: 1.59, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 1.59, x2: 0, y2: 0, w: 0.3 },
         // Pin 2 → col 0, row 1 (y = 2.54)
-        { type: 'trace', x1: 0.57, y1: 0.0, x2: 0, y2: 0.0, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 0.0, x2: 0, y2: 2.54, w: 0.3 },
+        { type: 'trace', x1: 0, y1: 2.54, x2: 1.84, y2: 2.54, w: 0.3 },
         // Pin 3 → col 0, row 2 (y = 5.08)
-        { type: 'trace', x1: 0.57, y1: 0.95, x2: 0, y2: 0.95, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 0.95, x2: 0, y2: 5.08, w: 0.3 },
+        { type: 'trace', x1: 1.84, y1: 3.49, x2: 1.5, y2: 3.49, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 3.49, x2: 0, y2: 5.08, w: 0.3 },
         // Pin 4 → col 2, row 2 (x = 5.08, y = 5.08)
-        { type: 'trace', x1: 1.97, y1: 0.95, x2: 5.08, y2: 0.95, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: 0.95, x2: 5.08, y2: 5.08, w: 0.3 },
+        { type: 'trace', x1: 3.24, y1: 3.49, x2: 3.54, y2: 3.49, w: 0.3 },
+        { type: 'trace', x1: 3.54, y1: 3.49, x2: 5.08, y2: 5.08, w: 0.3 },
         // Pin 5 → col 2, row 0 (x = 5.08, y = 0)
-        { type: 'trace', x1: 1.97, y1: -0.95, x2: 5.08, y2: -0.95, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: -0.95, x2: 5.08, y2: 0, w: 0.3 },
+        { type: 'trace', x1: 3.24, y1: 1.59, x2: 3.54, y2: 1.59, w: 0.3 },
+        { type: 'trace', x1: 3.54, y1: 1.59, x2: 5.08, y2: 0, w: 0.3 },
       ],
 
       mask: [
-        { type: 'pad', x: 0.57, y: -0.95, w: 1.1, h: 0.65 },
-        { type: 'pad', x: 0.57, y: 0.0, w: 1.1, h: 0.65 },
-        { type: 'pad', x: 0.57, y: 0.95, w: 1.1, h: 0.65 },
-        { type: 'pad', x: 1.97, y: -0.95, w: 1.1, h: 0.65 },
-        { type: 'pad', x: 1.97, y: 0.95, w: 1.1, h: 0.65 },
+        { type: 'pad', x: 1.84, y: 1.59, w: 1.1, h: 0.65 },
+        { type: 'pad', x: 1.84, y: 2.54, w: 1.1, h: 0.65 },
+        { type: 'pad', x: 1.84, y: 3.49, w: 1.1, h: 0.65 },
+        { type: 'pad', x: 3.24, y: 1.59, w: 1.1, h: 0.65 },
+        { type: 'pad', x: 3.24, y: 3.49, w: 1.1, h: 0.65 },
       ],
 
       silk: [
         {
           type: 'poly',
           points: [
-            { x: 0.0, y: -1.5 },
-            { x: 2.54, y: -1.5 },
-            { x: 2.54, y: 1.5 },
-            { x: 0.0, y: 1.5 },
-            { x: 0.0, y: -1.5 },
+            { x: 1.09, y: 1.04 },
+            { x: 3.99, y: 1.04 },
+            { x: 3.99, y: 4.04 },
+            { x: 1.09, y: 4.04 },
+            { x: 1.09, y: 1.04 },
           ],
         },
-        { type: 'circle', x: 0.25, y: -1.15, d: 0.2 },
+        { type: 'circle', x: 1.34, y: 4.6, d: 0.2 },
       ],
     },
 
@@ -206,65 +206,67 @@ export const ADAPTER_LIBRARY = [
       copper: [
         // SOIC-8 SMD pads (1.27mm pitch, 0.65mm wide, 1.5mm long)
         // Left side: pins 1-4
-        { type: 'pad', x: 2, y: 1.905, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 2, y: 3.175, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 2, y: 4.445, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 2, y: 5.715, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2.31, y: 1.905, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2.31, y: 3.175, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2.31, y: 4.445, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 2.31, y: 5.715, w: 1.5, h: 0.6 },
         // Right side: pins 5-8 (mirrored, 5 at bottom)
-        { type: 'pad', x: 5.48, y: 5.715, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 5.48, y: 4.445, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 5.48, y: 3.175, w: 1.5, h: 0.6 },
-        { type: 'pad', x: 5.48, y: 1.905, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.31, y: 5.715, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.31, y: 4.445, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.31, y: 3.175, w: 1.5, h: 0.6 },
+        { type: 'pad', x: 5.31, y: 1.905, w: 1.5, h: 0.6 },
 
         // Traces: SMD → through-hole (direct horizontal routes)
-        // Left side: pins 1-4 → col 0
-        { type: 'trace', x1: 0.8, y1: 0.0, x2: 0, y2: 0, w: 0.3 },
-        { type: 'trace', x1: 0.8, y1: 1.27, x2: 0, y2: 1.27, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 1.27, x2: 0, y2: 2.54, w: 0.3 },
-        { type: 'trace', x1: 0.8, y1: 2.54, x2: 0, y2: 2.54, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 2.54, x2: 0, y2: 5.08, w: 0.3 },
-        { type: 'trace', x1: 0.8, y1: 3.81, x2: 0, y2: 3.81, w: 0.3 },
-        { type: 'trace', x1: 0, y1: 3.81, x2: 0, y2: 7.62, w: 0.3 },
+        // Left side: pins 1-4  col 0
+        { type: 'trace', x1: 2.31, y1: 1.905, x2: 1.5, y2: 1.905, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 1.905, x2: 0, y2: 0, w: 0.3 },
+        { type: 'trace', x1: 2.31, y1: 3.175, x2: 1.5, y2: 3.175, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 3.175, x2: 0, y2: 2.54, w: 0.3 },
+        { type: 'trace', x1: 2.31, y1: 4.445, x2: 1.5, y2: 4.445, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 4.445, x2: 0, y2: 5.08, w: 0.3 },
+        { type: 'trace', x1: 2.31, y1: 5.715, x2: 1.5, y2: 5.715, w: 0.3 },
+        { type: 'trace', x1: 1.5, y1: 5.715, x2: 0, y2: 7.62, w: 0.3 },
         // Right side: pins 5-8 → col 2 (x = 5.08)
-        { type: 'trace', x1: 4.28, y1: 3.81, x2: 5.08, y2: 3.81, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: 3.81, x2: 5.08, y2: 7.62, w: 0.3 },
-        { type: 'trace', x1: 4.28, y1: 2.54, x2: 5.08, y2: 2.54, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: 2.54, x2: 5.08, y2: 5.08, w: 0.3 },
-        { type: 'trace', x1: 4.28, y1: 1.27, x2: 5.08, y2: 1.27, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: 1.27, x2: 5.08, y2: 2.54, w: 0.3 },
-        { type: 'trace', x1: 4.28, y1: 0.0, x2: 5.08, y2: 0, w: 0.3 },
+        { type: 'trace', x1: 5.31, y1: 5.715, x2: 6.21, y2: 5.715, w: 0.3 },
+        { type: 'trace', x1: 6.21, y1: 5.715, x2: 7.62, y2: 7.62, w: 0.3 },
+        { type: 'trace', x1: 5.31, y1: 4.445, x2: 6.21, y2: 4.445, w: 0.3 },
+        { type: 'trace', x1: 6.21, y1: 4.445, x2: 7.62, y2: 5.08, w: 0.3 },
+        { type: 'trace', x1: 5.31, y1: 3.175, x2: 6.21, y2: 3.175, w: 0.3 },
+        { type: 'trace', x1: 6.21, y1: 3.175, x2: 7.62, y2: 2.54, w: 0.3 },
+        { type: 'trace', x1: 5.31, y1: 1.905, x2: 6.21, y2: 1.905, w: 0.3 },
+        { type: 'trace', x1: 6.21, y1: 1.905, x2: 7.62, y2: 0, w: 0.3 },
       ],
 
       mask: [
-        { type: 'pad', x: 0.8, y: 0.0, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 0.8, y: 1.27, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 0.8, y: 2.54, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 0.8, y: 3.81, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 4.28, y: 3.81, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 4.28, y: 2.54, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 4.28, y: 1.27, w: 1.6, h: 0.7 },
-        { type: 'pad', x: 4.28, y: 0.0, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 2.31, y: 1.905, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 2.31, y: 3.175, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 2.31, y: 4.445, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 2.31, y: 5.715, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 5.31, y: 5.715, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 5.31, y: 4.445, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 5.31, y: 3.175, w: 1.6, h: 0.7 },
+        { type: 'pad', x: 5.31, y: 1.905, w: 1.6, h: 0.7 },
       ],
 
       silk: [
         {
           type: 'poly',
           points: [
-            { x: 0.2, y: -0.7 },
-            { x: 4.88, y: -0.7 },
-            { x: 4.88, y: 4.51 },
-            { x: 0.2, y: 4.51 },
-            { x: 0.2, y: -0.7 },
+            { x: 1.6, y: 1.15 },
+            { x: 6.02, y: 1.15 },
+            { x: 6.02, y: 6.47 },
+            { x: 1.6, y: 6.47 },
+            { x: 1.6, y: 1.15 },
           ],
         },
         // Pin 1 marker
-        { type: 'circle', x: 0.6, y: -0.3, d: 0.25 },
+        { type: 'circle', x: 1.95, y: 6.2, d: 0.25 },
       ],
     },
 
     outline: { width: 7.0, height: 10.0 },
     outlineOffset: { x: 0, y: 0 },
-    widthPins: 3,
+    widthPins: 4,
     heightPins: 4,
   },
 ];
