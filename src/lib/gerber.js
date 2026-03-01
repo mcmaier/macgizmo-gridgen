@@ -47,6 +47,9 @@ export const LABEL_HEIGHT = 1;
 /** Label step interval (every N-th row/col gets a label) */
 export const LABEL_STEP = 5;
 
+export const SMD_PAD_SIZE = 1.0;
+export const SMD_PAD_GRID = 1.27;
+
 // ─── Gerber format helpers ────────────────────────────────────────────
 
 const GERBER_HEADER = (layerName) => `G04 MacGizmo GridGen - Parametric Prototype PCB*
@@ -491,12 +494,16 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
   const thSeen = new Set(); // deduplicate through-hole positions
   let nextAperture = 40;
 
+  const isTopLayer = layerName === 'F.Cu';
+
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;
     if (!adapter) continue;
     const originX = gridLeft + inst.col * pitch;
     const originY = gridBottom + inst.row * pitch;
 
+    if (isTopLayer) {
+    // F.Cu: render SMD pads and fanout traces
     for (const f of adapter.features.copper) {
       if (f.type === 'pad') {
         const key = `${f.w.toFixed(4)},${f.h.toFixed(4)}`;
@@ -516,8 +523,50 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
         });
       }
     }
+  } else {
+      // B.Cu: render SMD pad matrix under adapter area
+      // Unconnected pads on 1.27mm grid for hand-soldering
+      // 0805/1206 components like bypass caps and pull-up resistors.
+      // Matrix avoids TH pin columns (left/right edges) but extends
+      // one row above and below the adapter for extra space.
+      const smdPadSize = SMD_PAD_SIZE;
+      const smdGridPitch = SMD_PAD_GRID;
+      const key = `${smdPadSize.toFixed(4)},${smdPadSize.toFixed(4)}`;
+      if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+      const aperture = rectApertures.get(key);
 
-    // Through-hole pads at adapter pin positions (deduplicated)
+      // X range: skip the TH pin columns (col 0 and col max), use inner area only
+      const leftThCol = 0;
+      const rightThCol = Math.max(...adapter.throughPins.map(p => p.col));
+      const startX = originX + (leftThCol + 1) * pitch;
+      const endX   = originX + (rightThCol - 1) * pitch;
+
+      // Y range
+      const startY = originY;
+      const endY   = originY + (adapter.heightPins - 1) * pitch;
+
+      for (let sx = startX; sx <= endX; sx += smdGridPitch) {
+        for (let sy = startY; sy <= endY; sy += smdGridPitch) {
+          const rx = round4(sx);
+          const ry = round4(sy);
+          // Skip positions too close to any TH drill hole
+          let tooClose = false;
+          for (const pin of adapter.throughPins) {
+            const tx = originX + pin.col * pitch;
+            const ty = originY + pin.row * pitch;
+            if (Math.abs(rx - tx) < smdPadSize && Math.abs(ry - ty) < smdPadSize) {
+              tooClose = true;
+              break;
+            }
+          }
+          if (!tooClose) {
+            adapterFeatures.push({ type: 'pad', x: rx, y: ry, aperture });
+          }
+        }
+      }
+    }
+
+    // Through-hole pads at adapter pin positions (both layers, deduplicated)
     for (const pin of adapter.throughPins) {
       const x = round4(gridLeft + (inst.col + pin.col) * pitch);
       const y = round4(gridBottom + (inst.row + pin.row) * pitch);
@@ -596,6 +645,8 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
   let nextAperture = 40;
   const adapterMask = [];
   const maskThSeen = new Set();
+  
+  const isTopMask = layerName === 'F.Mask';
 
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;
@@ -603,6 +654,8 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
     const originX = gridLeft + inst.col * pitch;
     const originY = gridBottom + inst.row * pitch;
 
+    if (isTopMask) {
+    // F.Mask: SMD pad mask openings from adapter features
     for (const f of adapter.features.mask) {
       if (f.type === 'pad') {
         const key = `${f.w.toFixed(4)},${f.h.toFixed(4)}`;
@@ -610,6 +663,48 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
         adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
       }
     }
+  } else {
+      // B.Mask: mask openings for SMD pad matrix (matching B.Cu pads)
+      const smdPadSize = SMD_PAD_SIZE;
+      const smdMaskSize = smdPadSize + maskExpansion * 2;
+      const smdGridPitch = SMD_PAD_GRID;
+      const key = `${smdMaskSize.toFixed(4)},${smdMaskSize.toFixed(4)}`;
+      if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+      const aperture = rectApertures.get(key);
+
+      const leftThCol = 0;
+      const rightThCol = Math.max(...adapter.throughPins.map(p => p.col));
+      //const startX = originX + (leftThCol + 1) * pitch - pitch / 2;
+      //const endX   = originX + (rightThCol - 1) * pitch + pitch / 2;
+      //const startY = originY - pitch + 0.5;
+      //const endY   = originY + (adapter.heightPins - 1) * pitch + pitch - 0.5;
+
+      const startX = originX + (leftThCol + 1) * pitch;
+      const endX   = originX + (rightThCol - 1) * pitch;
+      const startY = originY;
+      const endY   = originY + (adapter.heightPins - 1) * pitch;
+
+      for (let sx = startX; sx <= endX; sx += smdGridPitch) {        
+        for (let sy = startY; sy <= endY; sy += smdGridPitch) {
+          const rx = round4(sx);
+          const ry = round4(sy);
+          let tooClose = false;
+          for (const pin of adapter.throughPins) {
+            const tx = originX + pin.col * pitch;
+            const ty = originY + pin.row * pitch;
+            if (Math.abs(rx - tx) < smdPadSize && Math.abs(ry - ty) < smdPadSize) {
+              tooClose = true;
+              break;
+            }
+          }
+          if (!tooClose) {
+            adapterMask.push({ x: rx, y: ry, aperture });
+          }
+        }
+      }
+    }
+
+    // TH mask openings (both layers, deduplicated)
 for (const pin of adapter.throughPins) {
       const x = round4(gridLeft + (inst.col + pin.col) * pitch);
       const y = round4(gridBottom + (inst.row + pin.row) * pitch);
