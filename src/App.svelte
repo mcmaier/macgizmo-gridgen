@@ -1,10 +1,10 @@
 <script>
   import Controls from './components/Controls.svelte';
   import Preview from './components/Preview.svelte';
-    import ModuleToolbar from './components/ModuleToolbar.svelte';
+  import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
-    import { ADAPTER_LIBRARY } from './lib/adapters.js';
+  import { ADAPTER_LIBRARY, getRotatedAdapter } from './lib/adapters.js';
 
   let config = $state({
     width: 50,
@@ -33,10 +33,10 @@
   let adapters = $state([]);
 
   async function handleExport() {
-        // Attach adapter definitions for Gerber generation
+    // Attach rotated adapter definitions for Gerber generation
     const resolvedAdapters = adapters.map(inst => ({
       ...inst,
-      _adapterDef: ADAPTER_LIBRARY.find(a => a.id === inst.adapterId),
+      _adapterDef: getRotatedAdapter(inst.adapterId, inst.rotation || 0),
     }));
 
     const files = generateAllFiles(config, resolvedAdapters);

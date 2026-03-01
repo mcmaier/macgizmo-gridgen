@@ -1,7 +1,7 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
   import { MODULE_LIBRARY, getRotatedModule } from '../lib/modules.js';
-  import { ADAPTER_LIBRARY } from '../lib/adapters.js';
+  import { getRotatedAdapter } from '../lib/adapters.js';
   
   let { config, modules = $bindable(), adapters = $bindable() } = $props();
 
@@ -9,10 +9,10 @@
     ...config,
   });
 
-    // Resolve adapter definitions for pad suppression
+  // Resolve adapter definitions with rotation applied
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
-    _adapterDef: ADAPTER_LIBRARY.find(a => a.id === inst.adapterId),
+    _adapterDef: getRotatedAdapter(inst.adapterId, inst.rotation || 0),
   })));
 
   let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
@@ -20,6 +20,39 @@
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
   let grid = $derived(computeGrid(fullConfig));
+  
+  // Detect adapter overlap and out-of-bounds issues
+  let adapterConflicts = $derived.by(() => {
+    const conflicts = new Set(); // adapter instance IDs with problems
+    const occupied = new Map();  // "col,row" → adapter instance ID
+
+    for (const inst of adapters) {
+      const def = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+      if (!def) continue;
+
+      for (let c = 0; c < def.widthPins; c++) {
+        for (let r = 0; r < def.heightPins; r++) {
+          const gc = inst.col + c;
+          const gr = inst.row + r;
+
+          // Out of grid bounds?
+          if (gc < 0 || gc >= grid.cols || gr < 0 || gr >= grid.rows) {
+            conflicts.add(inst.id);
+            continue;
+          }
+
+          const key = `${gc},${gr}`;
+          if (occupied.has(key)) {
+            conflicts.add(inst.id);
+            conflicts.add(occupied.get(key));
+          } else {
+            occupied.set(key, inst.id);
+          }
+        }
+      }
+    }
+    return conflicts;
+  });
 
   // Extra padding for labels outside the board
   let labelPad = 2;//$derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
@@ -66,7 +99,7 @@
 
     /** Convert adapter grid position to board mm and get its features */
   function adapterToMm(inst) {
-    const def = ADAPTER_LIBRARY.find(a => a.id === inst.adapterId);
+    const def = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
     if (!def) return null;
     const pitch = config.pitch;
     const x = grid.gridLeft + (inst.col || 0) * pitch;
@@ -120,9 +153,20 @@
     const pitch = config.pitch;
     const dCols = Math.round((pt.x - dragging.startX) / pitch);
     const dRows = Math.round((pt.y - dragging.startY) / pitch);
+    
+    let newCol = dragging.startCol + dCols;
+    let newRow = dragging.startRow + dRows;
 
-    const newCol = dragging.startCol + dCols;
-    const newRow = dragging.startRow + dRows;
+    // Clamp adapters to grid bounds
+    if (dragging.kind === 'adapter') {
+      const inst = adapters.find(a => a.id === dragging.instanceId);
+      const def = inst && getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+      if (def) {
+        const { cols, rows } = grid;
+        newCol = Math.max(0, Math.min(newCol, cols - def.widthPins));
+        newRow = Math.max(0, Math.min(newRow, rows - def.heightPins));
+      }
+    }
 
     if (dragging.kind === 'module') {
       modules = modules.map(m =>
@@ -242,12 +286,30 @@
   <!-- Adapter overlays (real Gerber features) -->
   {#each adapters as inst (inst.id)}
     {@const a = adapterToMm(inst)}
+    {@const hasConflict = adapterConflicts.has(inst.id)}
     {#if a}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g class="module-overlay adapter-overlay"
         class:dragging={dragging?.instanceId === inst.id}
+        class:conflict={hasConflict}
         onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
         style="cursor: grab;">
+        
+        <!-- Conflict highlight background -->
+        {#if hasConflict}
+          <rect
+            x={a.x - 0.5}
+            y={a.y - 0.5}
+            width={(a.def.widthPins - 1) * a.pitch + 1}
+            height={(a.def.heightPins - 1) * a.pitch + 1}
+            fill="#ff0000"
+            fill-opacity="0.15"
+            stroke="#ff0000"
+            stroke-width="0.2"
+            stroke-dasharray="0.5 0.3"
+            rx="0.3"
+          />
+        {/if}
 
         {#each a.def.features.copper as f}
           {#if f.type === 'pad'}

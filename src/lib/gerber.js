@@ -211,8 +211,13 @@ export function generatePadPositions(config, placedAdapters = []) {
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;
     if (!adapter) continue;
-    for (const pin of adapter.throughPins) {
-      adapterOccupied.add(`${inst.col + pin.col},${inst.row + pin.row}`);
+    // Block ALL grid positions within the adapter's footprint rectangle.
+    // Through-hole interface pins get re-added by the adapter Gerber features.
+    // Inner positions must be empty to avoid overlap with SMD pads and traces.
+    for (let c = 0; c < adapter.widthPins; c++) {
+      for (let r = 0; r < adapter.heightPins; r++) {
+        adapterOccupied.add(`${inst.col + c},${inst.row + r}`);
+      }
     }
   }
 
@@ -483,6 +488,7 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
   // Collect adapter copper features with unique apertures (starting D40)
   const adapterFeatures = [];
   const rectApertures = new Map();
+  const thSeen = new Set(); // deduplicate through-hole positions
   let nextAperture = 40;
 
   for (const inst of placedAdapters) {
@@ -511,13 +517,15 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
       }
     }
 
-    // Through-hole pads at adapter pin positions
+    // Through-hole pads at adapter pin positions (deduplicated)
     for (const pin of adapter.throughPins) {
-      adapterFeatures.push({
-        type: 'th',
-        x: gridLeft + (inst.col + pin.col) * pitch,
-        y: gridBottom + (inst.row + pin.row) * pitch,
-      });
+      const x = round4(gridLeft + (inst.col + pin.col) * pitch);
+      const y = round4(gridBottom + (inst.row + pin.row) * pitch);
+      const key = `${fmtCoord(x)},${fmtCoord(y)}`;
+      if (!thSeen.has(key)) {
+        thSeen.add(key);
+        adapterFeatures.push({ type: 'th', x, y });
+      }
     }
   }
 
@@ -587,6 +595,7 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
   const rectApertures = new Map();
   let nextAperture = 40;
   const adapterMask = [];
+  const maskThSeen = new Set();
 
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;
@@ -601,14 +610,16 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
         adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
       }
     }
-    for (const pin of adapter.throughPins) {
-      adapterMask.push({
-        x: gridLeft + (inst.col + pin.col) * pitch,
-        y: gridBottom + (inst.row + pin.row) * pitch,
-        aperture: 10,
-      });
+for (const pin of adapter.throughPins) {
+      const x = round4(gridLeft + (inst.col + pin.col) * pitch);
+      const y = round4(gridBottom + (inst.row + pin.row) * pitch);
+      const key = `${fmtCoord(x)},${fmtCoord(y)}`;
+      if (!maskThSeen.has(key)) {
+        maskThSeen.add(key);
+        adapterMask.push({ x, y, aperture: 10 });
       }
     }
+  }
 
   for (const [key, num] of rectApertures) {
     const [w, h] = key.split(',').map(Number);
@@ -902,14 +913,19 @@ export function generateDrillFile(config, placedAdapters = []) {
     drill += `X${pad.x.toFixed(3)}Y${pad.y.toFixed(3)}\n`;
   }
   
-  // Adapter through-hole drill positions (same diameter as grid pads)
+  // Adapter through-hole drill positions (deduplicated, same diameter as grid pads)
+  const drillSeen = new Set();
   for (const inst of placedAdapters) {
     const adapter = inst._adapterDef;
     if (!adapter) continue;
     for (const pin of adapter.throughPins) {
-      const px = gridLeft + (inst.col + pin.col) * pitch;
-      const py = gridBottom + (inst.row + pin.row) * pitch;
-      drill += `X${px.toFixed(3)}Y${py.toFixed(3)}\n`;
+      const px = round4(gridLeft + (inst.col + pin.col) * pitch);
+      const py = round4(gridBottom + (inst.row + pin.row) * pitch);
+      const key = `${px.toFixed(3)},${py.toFixed(3)}`;
+      if (!drillSeen.has(key)) {
+        drillSeen.add(key);
+        drill += `X${px.toFixed(3)}Y${py.toFixed(3)}\n`;
+      }
     }
   }
 

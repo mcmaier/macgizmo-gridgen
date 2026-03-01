@@ -279,6 +279,98 @@ export function getAdapter(adapterId) {
 }
 
 /**
+ * Get a rotated copy of an adapter definition.
+ * Rotation: 0=0°, 1=90° CW, 2=180°, 3=270° CW.
+ *
+ * Rotates throughPins (grid indices), all feature coordinates (mm),
+ * pad dimensions (w/h swap), and outline.
+ * Rotation center = middle of the widthPins × heightPins grid rectangle.
+ */
+export function getRotatedAdapter(adapterId, rotation = 0) {
+  const adapter = ADAPTER_LIBRARY.find(a => a.id === adapterId);
+  if (!adapter) return null;
+
+  const r = ((rotation % 4) + 4) % 4;
+  if (r === 0) return adapter; // no-op
+
+  const maxCol = adapter.widthPins - 1;
+  const maxRow = adapter.heightPins - 1;
+  const pitch = adapter.pitch;
+
+  // Center of the grid rectangle in mm (relative to origin pin)
+  const cx = maxCol * pitch / 2;
+  const cy = maxRow * pitch / 2;
+
+  // Rotate a grid index (col, row) around the rectangle center
+  function rotPin(col, row) {
+    switch (r) {
+      case 1: return { col: row, row: maxCol - col };
+      case 2: return { col: maxCol - col, row: maxRow - row };
+      case 3: return { col: maxRow - row, row: col };
+    }
+  }
+
+  // Rotate a point (x, y) in mm around (cx, cy)
+  function rotPt(x, y) {
+    const dx = x - cx, dy = y - cy;
+    switch (r) {
+      case 1: return { x: cy + dy, y: cx - dx };   // (dx,dy) → (dy,-dx) + new center
+      case 2: return { x: cx - dx, y: cy - dy };
+      case 3: return { x: cy - dy, y: cx + dx };    // (dx,dy) → (-dy,dx) + new center
+    }
+  }
+
+  // Rotated throughPins
+  const throughPins = adapter.throughPins.map(p => ({
+    ...rotPin(p.col, p.row),
+    label: p.label,
+  }));
+
+  // Swap dimensions for 90°/270°
+  const swap = r === 1 || r === 3;
+  const widthPins = swap ? adapter.heightPins : adapter.widthPins;
+  const heightPins = swap ? adapter.widthPins : adapter.heightPins;
+  const outline = swap
+    ? { width: adapter.outline.height, height: adapter.outline.width }
+    : { ...adapter.outline };
+
+  // Rotate feature coordinates
+  function rotFeature(f) {
+    if (f.type === 'pad') {
+      const p = rotPt(f.x, f.y);
+      return {
+        type: 'pad', x: p.x, y: p.y,
+        w: swap ? f.h : f.w,
+        h: swap ? f.w : f.h,
+      };
+    } else if (f.type === 'trace') {
+      const p1 = rotPt(f.x1, f.y1);
+      const p2 = rotPt(f.x2, f.y2);
+      return { type: 'trace', x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, w: f.w };
+    } else if (f.type === 'circle') {
+      const p = rotPt(f.x, f.y);
+      return { type: 'circle', x: p.x, y: p.y, d: f.d };
+    } else if (f.type === 'poly') {
+      return { type: 'poly', points: f.points.map(pt => rotPt(pt.x, pt.y)) };
+    }
+    return f;
+  }
+
+  return {
+    ...adapter,
+    throughPins,
+    widthPins,
+    heightPins,
+    outline,
+    features: {
+      copper: adapter.features.copper.map(rotFeature),
+      mask: adapter.features.mask.map(rotFeature),
+      silk: adapter.features.silk.map(rotFeature),
+    },
+  };
+}
+
+/**
  * Compute absolute through-hole positions for a placed adapter.
  * Returns array of { x, y, col, row } in board mm coordinates.
  */
