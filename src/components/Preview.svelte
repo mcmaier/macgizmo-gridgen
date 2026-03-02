@@ -1,6 +1,6 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
-  import { MODULE_LIBRARY, getRotatedModule } from '../lib/modules.js';
+  import { getRotatedModule } from '../lib/modules.js';
   import { getRotatedAdapter } from '../lib/adapters.js';
   
   let { config, modules = $bindable(), adapters = $bindable() } = $props();
@@ -54,8 +54,7 @@
     return conflicts;
   });
 
-  // Extra padding for labels outside the board
-  let labelPad = 2;//$derived((config.labels?.rows || config.labels?.cols) ? 4 : 1);
+  let labelPad = 2;
   let viewBox = $derived(`${-labelPad} ${-labelPad} ${config.width + labelPad * 2} ${config.height + labelPad * 2}`);
 
   const colors = {
@@ -283,71 +282,7 @@
     />
      {/each}
 
-  <!-- Adapter overlays (real Gerber features) -->
-  {#each adapters as inst (inst.id)}
-    {@const a = adapterToMm(inst)}
-    {@const hasConflict = adapterConflicts.has(inst.id)}
-    {#if a}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <g class="module-overlay adapter-overlay"
-        class:dragging={dragging?.instanceId === inst.id}
-        class:conflict={hasConflict}
-        onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
-        style="cursor: grab;">
-        
-        <!-- Conflict highlight background -->
-        {#if hasConflict}
-          <rect
-            x={a.x - 0.5}
-            y={a.y - 0.5}
-            width={(a.def.widthPins - 1) * a.pitch + 1}
-            height={(a.def.heightPins - 1) * a.pitch + 1}
-            fill="#ff0000"
-            fill-opacity="0.15"
-            stroke="#ff0000"
-            stroke-width="0.2"
-            stroke-dasharray="0.5 0.3"
-            rx="0.3"
-          />
-        {/if}
-
-        {#each a.def.features.copper as f}
-          {#if f.type === 'pad'}
-            <rect x={a.x + f.x - f.w / 2} y={a.y + f.y - f.h / 2}
-              width={f.w} height={f.h} fill="#c8a84e" fill-opacity="0.8" />
-          {:else if f.type === 'trace'}
-            <line x1={a.x + f.x1} y1={a.y + f.y1} x2={a.x + f.x2} y2={a.y + f.y2}
-              stroke="#c8a84e" stroke-width={f.w} stroke-opacity="0.7" stroke-linecap="round" />
-          {/if}
-        {/each}
-
-        {#each a.def.throughPins as pin}
-          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
-            r={copperDia / 2} fill="#c8a84e" />
-          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
-            r={config.padDiameter / 2} fill="#1a1a1a" />
-        {/each}
-
-        {#each a.def.features.silk as f}
-          {#if f.type === 'poly'}
-            <path d={polyToPath(f.points.map(p => ({ x: a.x + p.x, y: a.y + p.y })))}
-              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
-              stroke-linejoin="round" fill="none" opacity="0.7" />
-          {:else if f.type === 'circle'}
-            <circle cx={a.x + f.x} cy={a.y + f.y} r={f.d / 2} fill="#e8e8e8" opacity="0.7" />
-          {/if}
-        {/each}
-
-        <g transform="translate({a.x + (a.def.widthPins - 1) * a.pitch / 2},{a.y + (a.def.heightPins - 1) * a.pitch / 2 + a.def.outline.height * 0.4}) scale(1,-1)">
-          <text x="0" y="0" text-anchor="middle" dominant-baseline="central"
-            fill="#f9e2af" fill-opacity="0.9"
-            font-size="{Math.min(1.8, a.def.outline.width * 0.08)}"
-            font-family="'Segoe UI', system-ui, sans-serif"
-            font-weight="600">⚡ {a.def.name}</text>
-        </g>
-      </g>
-    {/if}
-  {/each}
+  
   
   <!-- Module overlays -->
   {#each modules as inst (inst.id)}
@@ -414,6 +349,88 @@
       </g>
     {/if}
   {/each}
+
+  <!-- Adapter overlays (real Gerber features) -->
+  {#each adapters as inst (inst.id)}
+    {@const a = adapterToMm(inst)}
+    {@const hasConflict = adapterConflicts.has(inst.id)}
+    {#if a}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <g class="module-overlay adapter-overlay"
+        class:dragging={dragging?.instanceId === inst.id}
+        class:conflict={hasConflict}
+        onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
+        style="cursor: grab;">
+        
+        <!-- Conflict highlight background -->
+        {#if hasConflict}
+          <rect
+            x={a.x - 0.5}
+            y={a.y - 0.5}
+            width={(a.def.widthPins - 1) * a.pitch + 1}
+            height={(a.def.heightPins - 1) * a.pitch + 1}
+            fill="#ff0000"
+            fill-opacity="0.15"
+            stroke="#ff0000"
+            stroke-width="0.2"
+            stroke-dasharray="0.5 0.3"
+            rx="0.3"
+          />
+        {/if}
+
+        {#each a.def.features.copper as f}
+          {#if f.type === 'pad'}
+            <rect x={a.x + f.x - f.w / 2} y={a.y + f.y - f.h / 2}
+              width={f.w} height={f.h} fill="#c8a84e" fill-opacity="0.8" />
+          {:else if f.type === 'trace'}
+            <line x1={a.x + f.x1} y1={a.y + f.y1} x2={a.x + f.x2} y2={a.y + f.y2}
+              stroke="#c8a84e" stroke-width={f.w} stroke-opacity="0.7" stroke-linecap="round" />
+          {/if}
+        {/each}
+
+        {#each a.def.throughPins as pin}
+          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
+            r={copperDia / 2} fill="#c8a84e" />
+          <circle cx={a.x + pin.col * a.pitch} cy={a.y + pin.row * a.pitch}
+            r={config.padDiameter / 2} fill="#1a1a1a" />
+        {/each}
+
+        {#each a.def.features.silk as f}
+          {#if f.type === 'poly'}
+            <path d={polyToPath(f.points.map(p => ({ x: a.x + p.x, y: a.y + p.y })))}
+              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+              stroke-linejoin="round" fill="none" opacity="0.7" />
+          {:else if f.type === 'circle'}
+            <circle cx={a.x + f.x} cy={a.y + f.y} r={f.d / 2} fill="#e8e8e8" opacity="0.7" />
+          {/if}
+        {/each}
+        
+        <!-- Corner markers at adapter boundary (pointing inward) -->
+        {#each [
+          { col: 0, row: 0, dx: 1, dy: 1 },
+          { col: a.def.widthPins - 1, row: 0, dx: -1, dy: 1 },
+          { col: 0, row: a.def.heightPins - 1, dx: 1, dy: -1 },
+          { col: a.def.widthPins - 1, row: a.def.heightPins - 1, dx: -1, dy: -1 },
+        ] as corner}
+          {@const cx = a.x + corner.col * a.pitch}
+          {@const cy = a.y + corner.row * a.pitch}
+          {@const vx = cx - corner.dx * 1.1}
+          {@const vy = cy - corner.dy * 1.1}
+          <path d="M {vx} {vy} L {vx + corner.dx * 1.3} {vy} M {vx} {vy} L {vx} {vy + corner.dy * 1.3}"
+            stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+            fill="none" opacity="0.7" />
+        {/each}
+
+        <g transform="translate({a.x + (a.def.widthPins - 1) * a.pitch / 2},{a.y + (a.def.heightPins - 1) * a.pitch / 2 + a.def.outline.height * 0.4}) scale(1,-1)">
+          <text x="0" y="0" text-anchor="middle" dominant-baseline="central"
+            fill="#f9e2af" fill-opacity="0.9"
+            font-size="{Math.min(1.8, a.def.outline.width * 0.08)}"
+            font-family="'Segoe UI', system-ui, sans-serif"
+            font-weight="600">⚡ {a.def.name}</text>
+        </g>
+      </g>
+    {/if}
+  {/each}    
   </g>
 </svg>
 

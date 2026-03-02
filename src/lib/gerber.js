@@ -47,8 +47,8 @@ export const LABEL_HEIGHT = 1;
 /** Label step interval (every N-th row/col gets a label) */
 export const LABEL_STEP = 5;
 
-export const SMD_PAD_SIZE = 1.0;
-export const SMD_PAD_GRID = 1.27;
+export const SMD_PAD_SIZE = 1.2;
+export const SMD_PAD_GRID = 2.54;
 
 // ─── Gerber format helpers ────────────────────────────────────────────
 
@@ -773,6 +773,32 @@ export function generateSilkscreen(config, placedAdapters = []) {
         // Approximate small circle as flash
         gerber += `X${fmtCoord(originX + f.x)}Y${fmtCoord(originY + f.y)}D03*\n`;
       }
+    }
+    
+    // Corner markers at the four corners of the adapter rectangle
+    // Small L-shaped brackets: corner vertex outside the pad, arms pointing inward
+    const cLen = 1.3; // arm length in mm
+    const cOff = 1.1; // corner vertex offset from pad center (outward)
+
+    const corners = [
+      { col: 0,                    row: 0,                     dx:  1, dy:  1 },
+      { col: adapter.widthPins-1,  row: 0,                     dx: -1, dy:  1 },
+      { col: 0,                    row: adapter.heightPins-1,   dx:  1, dy: -1 },
+      { col: adapter.widthPins-1,  row: adapter.heightPins-1,   dx: -1, dy: -1 },
+    ];
+
+    for (const c of corners) {
+      const cx = originX + c.col * pitch;
+      const cy = originY + c.row * pitch;
+      // Corner vertex: offset outward from pad center
+      const vx = cx - c.dx * cOff;
+      const vy = cy - c.dy * cOff;
+      // Horizontal arm: from vertex inward
+      gerber += `X${fmtCoord(vx)}Y${fmtCoord(vy)}D02*\n`;
+      gerber += `X${fmtCoord(vx + c.dx * cLen)}Y${fmtCoord(vy)}D01*\n`;
+      // Vertical arm: from vertex inward
+      gerber += `X${fmtCoord(vx)}Y${fmtCoord(vy)}D02*\n`;
+      gerber += `X${fmtCoord(vx)}Y${fmtCoord(vy + c.dy * cLen)}D01*\n`;
     }
   }
 
