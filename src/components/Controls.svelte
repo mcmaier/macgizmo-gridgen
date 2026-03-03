@@ -127,18 +127,6 @@
     if (step === 2) return `${prefix}: ×2`;
     return `${prefix}: ×${step}`;  
   }
-
-    // --- Order PCB: download Gerber, then open manufacturer ---
-  const manufacturers = [
-    { id: 'jlcpcb',  label: 'JLCPCB',  url: 'https://cart.jlcpcb.com/quote' },
-    { id: 'pcbway',  label: 'PCBWay',   url: 'https://www.pcbway.com/QuickOrderOnline.aspx' },
-    { id: 'aisler',  label: 'Aisler',   url: 'https://aisler.net/en/products/boards' },
-  ];
-
-  async function handleOrderAt(manufacturer) {
-    //await onExport();
-    window.open(manufacturer.url, '_blank', 'noopener');
-  }
   </script>
 
 <div class="controls">
@@ -262,20 +250,10 @@
     Download Gerber ZIP
   </button>
 
-    <div class="order-section">
-    <h3>Order PCB</h3>
-    <span class="order-hint">Go to any manufacturer <br>& upload your generated Gerber file</span>
-    <div class="order-buttons">
-      {#each manufacturers as mfr}
-        <button class="order-btn"
-          disabled={sigGrid.total === 0}
-          onclick={() => handleOrderAt(mfr)}>
-          {mfr.label}
-        </button>
-      {/each}
-    </div>
-  </div>
-  
+  <div class="order-section">
+    <h3>How to order the PCB?</h3>
+    <span class="order-hint">Go to the manufacturer of your choice<br>& upload your generated Gerber file</span>
+  </div>  
 </div>
 
 <style>
@@ -387,34 +365,5 @@
   .order-hint {
     font-size: 12px;
     color: #6c9fb2;
-  }
-
-  .order-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-  }
-
-  .order-btn {
-    padding: 10px 6px;
-    background: #313244;
-    border: 1px solid #45475a;
-    border-radius: 6px;
-    color: #cdd6f4;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .order-btn:hover {
-    background: #45475a;
-    border-color: #89b4fa;
-    color: #89b4fa;
-  }
-  .order-btn:disabled {
-    background: #585b70;
-    color: #45475a;
-    cursor: not-allowed;
-    border-color: #45475a;
   }
 </style>
