@@ -27,7 +27,7 @@ export const RAIL_TRACE_WIDTH = 0.8;
 export const GERBER_RAIL_TRACE_WIDTH = 0.8;
 
 /** Board size constraints (mm) */
-export const BOARD_MIN_WIDTH = 15;
+export const BOARD_MIN_WIDTH = 20;
 export const BOARD_MAX_WIDTH = 200;
 export const BOARD_MIN_HEIGHT = 10;
 export const BOARD_MAX_HEIGHT = 200;
@@ -834,6 +834,26 @@ export function generateSilkscreen(config, placedAdapters = []) {
         gerber += `X${fmtCoord(originX + f.x)}Y${fmtCoord(originY + f.y)}D03*\n`;
       }
     }
+
+    // Adapter silk label (text rendered from font strokes)
+    if (adapter.silkLabel) {
+      const sl = adapter.silkLabel;
+      const labelStrokes = getTextStrokes(
+        sl.text,
+        originX + sl.x,
+        originY + sl.y,
+        sl.height || 1.0,
+        sl.anchor || 'center',
+        sl.rotation || 0
+      );
+      for (const polyline of labelStrokes) {
+        if (polyline.length < 2) continue;
+        gerber += `X${fmtCoord(polyline[0].x)}Y${fmtCoord(polyline[0].y)}D02*\n`;
+        for (let i = 1; i < polyline.length; i++) {
+          gerber += `X${fmtCoord(polyline[i].x)}Y${fmtCoord(polyline[i].y)}D01*\n`;
+        }
+      }
+    }
     
     // Corner markers at the four corners of the adapter rectangle
     // Small L-shaped brackets: corner vertex outside the pad, arms pointing inward
@@ -983,7 +1003,7 @@ export function generateLabelStrokes(config) {
   }
 
   // ── Branding (bottom-right, shifted if holes block) ──
-  const brandText = 'MACGIZMO GRIDGEN';
+  const brandText = 'MACGIZMO.COM/GRIDGEN';
   const brandH = LABEL_HEIGHT;
   const scale = brandH / 5;
   const charWidth = 3 * scale;

@@ -2,6 +2,7 @@
   import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN, isInKeepout } from '../lib/gerber.js';
   import { getRotatedModule } from '../lib/modules.js';
   import { getRotatedAdapter } from '../lib/adapters.js';
+  import { getTextStrokes } from '../lib/font.js';
   
   let { config, modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect } = $props();
 
@@ -584,6 +585,17 @@
             <circle cx={a.x + f.x} cy={a.y + f.y} r={f.d / 2} fill="#e8e8e8" opacity="0.7" />
           {/if}
         {/each}
+
+        <!-- Silk label -->
+        {#if a.def.silkLabel}
+          {@const sl = a.def.silkLabel}
+          {@const labelStrokes = getTextStrokes(sl.text, a.x + sl.x, a.y + sl.y, sl.height || 1.0, sl.anchor || 'center', sl.rotation || 0)}
+          {#each labelStrokes as polyline}
+            <path d={polyToPath(polyline)}
+              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+              stroke-linejoin="round" fill="none" opacity="0.7" />
+          {/each}
+        {/if}
         
         <!-- Corner markers at adapter boundary (pointing inward) -->
         {#each [

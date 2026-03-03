@@ -9,6 +9,9 @@
  */
 
 const GLYPHS = {
+  '.': [[[1,0],[1,1],[2,1],[2,0],[1,0]]],
+  '/': [[[1,0],[3,5]]],
+  '-': [[[1,3],[3,3]]],
   '0': [[[0,0],[0,5],[3,5],[3,0],[0,0]], [[0,0],[3,5]]],
   '1': [[[1,4],[1.5,5],[1.5,0]], [[0,0],[3,0]]],
   '2': [[[0,4],[0,5],[3,5],[3,3],[0,0],[3,0]]],
@@ -56,7 +59,7 @@ const GLYPHS = {
  * @param {string} anchor - 'left', 'center', 'right'
  * @returns {Array} Array of polylines: [[{x,y}, {x,y}, ...], ...]
  */
-export function getTextStrokes(text, x, y, height, anchor = 'left') {
+export function getTextStrokes(text, x, y, height, anchor = 'left', rotation = 0) {
   const scale = height / 5;  // font design height is 5
   const charWidth = 2 * scale;
   const charGap = 2 * scale;
@@ -85,6 +88,23 @@ export function getTextStrokes(text, x, y, height, anchor = 'left') {
       }));
       allStrokes.push(polyline);
     }
+  }
+  
+  // Rotate all strokes around (x, y)
+  if (rotation === 90) {
+    return allStrokes.map(polyline =>
+      polyline.map(p => ({
+        x: round4(x + (p.y - y)),
+        y: round4(y - (p.x - x)),
+      }))
+    );
+  } else if (rotation === -90 || rotation === 270) {
+    return allStrokes.map(polyline =>
+      polyline.map(p => ({
+        x: round4(x - (p.y - y)),
+        y: round4(y + (p.x - x)),
+      }))
+    );
   }
 
   return allStrokes;

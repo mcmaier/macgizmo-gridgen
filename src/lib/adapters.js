@@ -141,6 +141,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 3,
+    //silkLabel: { text: 'GRID', x: 5.08, y: 2.54, height: 1.0 },
   },
 
     {
@@ -210,6 +211,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 4,
+    //silkLabel: { text: '0805', x: 5.08, y: 3.81, height: 1.0 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -262,6 +264,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 1,
     heightPins: 3,
+    //silkLabel: { text: '0805', x: 0.0, y: 2.54, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -303,58 +306,13 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 4,
     heightPins: 1,
+    //silkLabel: { text: '1206', x: 3.81, y: 0.0, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
   // SOT-23-3  (3 pins, 0.95mm pitch)
   // Grid: 3×2  |  TH pins: (0,0) (0,1) (2,0)
   // ═══════════════════════════════════════════════════════════════════
-/*
-  {
-    id: 'sot23-3',
-    name: 'SOT-23-3',
-    category: 'SOT',
-    pitch: 2.54,
-    color: '#e0a030',
-
-    throughPins: [
-      { col: 0, row: 1, label: '1' },
-      { col: 0, row: 0, label: '2' },
-      { col: 2, row: 0, label: '3' },
-    ],
-
-    features: {
-      copper: [
-        // SMD pads
-        { type: 'pad', x: 1.563, y: 2.22, w: 1.325, h: 0.6 },   // Pin 1
-        { type: 'pad', x: 1.563, y: 0.32, w: 1.325, h: 0.6 },   // Pin 2
-        { type: 'pad', x: 3.838, y: 1.27, w: 1.325, h: 0.6 },   // Pin 3
-
-        // Fanout traces
-        { type: 'trace', x1: 1.778, y1: 2.159, x2: 0.762, y2: 2.159, w: 0.3 },
-        { type: 'trace', x1: 0.762, y1: 2.159, x2: 0, y2: 2.54, w: 0.3 },
-        { type: 'trace', x1: 1.778, y1: 0.381, x2: 0.889, y2: 0.381, w: 0.3 },
-        { type: 'trace', x1: 0.889, y1: 0.381, x2: 0, y2: 0, w: 0.3 },
-        { type: 'trace', x1: 3.937, y1: 1.27, x2: 4.35, y2: 1.27, w: 0.3 },
-        { type: 'trace', x1: 4.35, y1: 1.27, x2: 5.08, y2: 0.6, w: 0.3 },
-        { type: 'trace', x1: 5.08, y1: 0.6, x2: 5.08, y2: 0, w: 0.3 },
-      ],
-      mask: [
-        { type: 'pad', x: 1.563, y: 2.22, w: 1.425, h: 0.7 },
-        { type: 'pad', x: 1.563, y: 0.32, w: 1.425, h: 0.7 },
-        { type: 'pad', x: 3.838, y: 1.27, w: 1.425, h: 0.7 },
-      ],
-      silk: [
-        { type: 'circle', x: 1.463, y: 2.72, d: 0.25 },
-
-      ],
-    },
-
-    outline: { width: 7.1, height: 4.5 },
-    outlineOffset: { x: 0, y: 0 },
-    widthPins: 3,
-    heightPins: 2,
-  },*/
     {
     id: 'sot23-3',
     name: 'SOT-23-3',
@@ -387,7 +345,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 3.838, y: 1.27, w: 1.425, h: 0.7 },
       ],
       silk: [
-        { type: 'circle', x: 1.263, y: 2.72, d: 0.25 },
+        { type: 'circle', x: 1.3, y: 2.9, d: 0.5 },
           /*         
           { type: 'poly', points: [
           { x: 1.09, y: 0.32 }, { x: 3.99, y: 0.32 },
@@ -402,6 +360,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 3,
     heightPins: 2,
+    silkLabel: { text: 'SOT23', x: 4, y: 2.5, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -456,7 +415,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 5.16, y: 3.49, w: 1.66, h: 0.75 },
       ],
       silk: [
-        { type: 'circle', x: 2.16, y: 3.99, d: 0.25 },
+        { type: 'circle', x: 2.2, y: 4.3, d: 0.5 },
         /*
           { type: 'poly', points: [
           { x: 1.09, y: 1.04 }, { x: 3.99, y: 1.04 },
@@ -471,6 +430,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 4,
     heightPins: 3,
+    silkLabel: { text: 'SOT23-6', x: 3.81, y: 0, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -514,7 +474,7 @@ export const ADAPTER_LIBRARY = [
       { type: 'pad', x: 3.478, y: 1.27, w: 1.325, h: 0.6 },
     ],
     silk: [
-      { type: 'circle', x: 1.303, y: 2.42, d: 0.25 },
+      { type: 'circle', x: 1.5, y: 2.6, d: 0.5 },
       /*
         { type: 'poly', points: [
         { x: 1.27, y: 0.52 }, { x: 3.81, y: 0.52 },
@@ -529,6 +489,7 @@ export const ADAPTER_LIBRARY = [
   outlineOffset: { x: 0, y: 0 },
   widthPins: 3,
   heightPins: 2,
+    silkLabel: { text: 'SC70', x: 4.5, y: 2.5, height: 0.8 },
 },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -583,7 +544,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 5.14, y: 3.19, w: 1.6, h: 0.5 },
       ],
       silk: [
-        { type: 'circle', x: 2.18, y: 3.69, d: 0.25 },
+        { type: 'circle', x: 2.3, y: 4, d: 0.5 },
         /*{ type: 'poly', points: [
           { x: 1.27, y: 1.44 }, { x: 3.81, y: 1.44 },
           { x: 3.81, y: 3.64 }, { x: 1.27, y: 3.64 },
@@ -596,6 +557,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 4,
     heightPins: 3,
+    silkLabel: { text: 'SC70-6', x: 3.81, y: 0, height: 0.8 },
   },
     {
     id: 'sot223',
@@ -632,7 +594,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 8.23, y: 2.54, w: 2.1, h: 3.9 },
       ],
       silk: [
-        { type: 'circle', x: 1.5, y: 5.75, d: 0.25 },
+        { type: 'circle', x: 1.3, y: 6, d: 0.5 },
       ],
     },
 
@@ -640,6 +602,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 3,
+    silkLabel: { text: 'SOT223', rotation: 90, x: 5.08, y: 2.54, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -705,7 +668,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 7.555, y: 5.715, w: 2.05, h: 0.7 },
       ],
       silk: [
-        { type: 'circle', x: 2.305, y: 6.215, d: 0.25 },
+        { type: 'circle', x: 2.4, y: 6.6, d: 0.5 },
       ],
     },
 
@@ -713,6 +676,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 4,
+    silkLabel: { text: 'SOIC-8', rotation: 90, x: 5.08, y: 3.81, height: 0.9 },
   },
 
   
@@ -825,7 +789,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 7.555, y: 10.795, w: 2.05, h: 0.7 },
       ],
       silk: [
-        { type: 'circle', x: 2.305, y: 11.295, d: 0.25 },
+        { type: 'circle', x: 1.8, y: 11.6, d: 0.5 },
         /*{ type: 'poly', points: [
           { x: 1.6, y: 1.15 }, { x: 6.02, y: 1.15 },
           { x: 6.02, y: 11.5 }, { x: 1.6, y: 11.5 },
@@ -838,6 +802,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 6,
+    silkLabel: { text: 'SOIC-16', rotation: 90, x: 5.08, y: 6.35, height: 0.9 },
   }, 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -981,7 +946,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 13.54, y: 14.605, w: 2.15, h: 0.7 },
       ],
       silk: [
-        { type: 'circle', x: 3.94, y: 15.105, d: 0.25 },
+        { type: 'circle', x: 4, y: 15.5, d: 0.5 },
           /*{ type: 'poly', points: [
           { x: 1.6, y: 1.15 }, { x: 6.02, y: 1.15 },
           { x: 6.02, y: 11.5 }, { x: 1.6, y: 11.5 },
@@ -994,6 +959,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 8,
     heightPins: 8,
+    silkLabel: { text: 'SOIC-16/20W', rotation: 90, x: 8.89, y: 8.89, height: 1 },
   }, 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1092,7 +1058,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 7.23, y: 5.435, w: 1.55, h: 0.5 },
       ],
       silk: [
-        { type: 'circle', x: 2.63, y: 5.935, d: 0.25 },
+        { type: 'circle', x: 2.5, y: 6.2, d: 0.5 },
         /*
         { type: 'poly', points: [
           { x: 1.6, y: 1.15 }, { x: 6.02, y: 1.15 },
@@ -1106,6 +1072,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 4,
+    silkLabel: { text: 'MSOP-8/12', rotation: 90, x: 5.08, y: 3.81, height: 0.8 },
   },
 
   
@@ -1177,7 +1144,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 7.943, y: 4.785, w: 1.575, h: 0.5 },
       ],
       silk: [
-        { type: 'circle', x: 1.918, y: 5.285, d: 0.25 },
+        { type: 'circle', x: 2.1, y: 5.5, d: 0.5 },
           /*{ type: 'poly', points: [
           { x: 1.0, y: 1.85 }, { x: 6.62, y: 1.85 },
           { x: 6.62, y: 5.25 }, { x: 1.0, y: 5.25 },
@@ -1191,6 +1158,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
     heightPins: 4,
+    silkLabel: { text: 'TSSOP-8', rotation: 90, x: 5.08, y: 3.81, height: 0.8 },
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1318,7 +1286,7 @@ export const ADAPTER_LIBRARY = [
         { type: 'pad', x: 9.213, y: 8.625, w: 1.575, h: 0.5 },
       ],
       silk: [
-        { type: 'circle', x: 3.188, y: 9.125, d: 0.25 },
+        { type: 'circle', x: 3.2, y: 9.5, d: 0.5 },
           /*{ type: 'poly', points: [
           { x: 1.0, y: 1.85 }, { x: 6.62, y: 1.85 },
           { x: 6.62, y: 5.25 }, { x: 1.0, y: 5.25 },
@@ -1332,6 +1300,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 6,
     heightPins: 6,
+    silkLabel: { text: 'TSSOP-16', rotation: 90, x: 6.35, y: 6.35, height: 0.8 },
   },   
 ];
 
@@ -1415,9 +1384,21 @@ export function getRotatedAdapter(adapterId, rotation = 0) {
     return f;
   }
 
+  // Rotate silkLabel position if present
+  // Label text rotation toggles between base and base+90° on each adapter rotation step
+  let silkLabel = adapter.silkLabel;
+  if (silkLabel) {
+    const p = rotPt(silkLabel.x, silkLabel.y);
+    const baseRot = silkLabel.rotation || 0;
+    // Each 90° adapter rotation toggles the label orientation
+    const labelRot = (r % 2 === 0) ? baseRot : (baseRot === 90 ? 0 : 90);
+    silkLabel = { ...silkLabel, x: p.x, y: p.y, rotation: labelRot };
+  }
+
   return {
     ...adapter,
     throughPins, widthPins, heightPins, outline,
+    silkLabel,
     features: {
       copper: adapter.features.copper.map(rotFeature),
       mask: adapter.features.mask.map(rotFeature),
