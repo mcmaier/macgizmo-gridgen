@@ -31,6 +31,11 @@
 
   let modules = $state([]);
   let adapters = $state([]);
+  let selectedInstanceId = $state(null);
+
+  function onSelect(id) {
+    selectedInstanceId = id;
+  }
 
   async function handleExport() {
     // Attach rotated adapter definitions for Gerber generation
@@ -57,8 +62,8 @@
       <Controls bind:config onExport={handleExport} />
     </aside>
     <main class="ppp-main">
-      <ModuleToolbar bind:modules bind:adapters {config} />
-      <Preview {config} bind:modules bind:adapters />
+      <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} />
+      <Preview {config} bind:modules bind:adapters {selectedInstanceId} {onSelect} />
     </main>
   </div>
 

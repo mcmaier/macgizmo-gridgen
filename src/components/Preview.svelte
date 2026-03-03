@@ -3,7 +3,7 @@
   import { getRotatedModule } from '../lib/modules.js';
   import { getRotatedAdapter } from '../lib/adapters.js';
   
-  let { config, modules = $bindable(), adapters = $bindable() } = $props();
+  let { config, modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect } = $props();
 
   let fullConfig = $derived({
     ...config,
@@ -54,8 +54,27 @@
     return conflicts;
   });
 
-  let labelPad = 2;
-  let viewBox = $derived(`${-labelPad} ${-labelPad} ${config.width + labelPad * 2} ${config.height + labelPad * 2}`);
+  // Add padding around board
+  let labelPad = 3;
+
+  // Zoom & pan state
+  let zoomLevel = $state(1); // 1 = fit whole board, >1 = zoomed in
+  let panX = $state(0); // pan offset in board-mm
+  let panY = $state(0);
+  let isPanning = $state(false);
+  let panStartPt = $state(null);
+
+  // Compute viewBox based on zoom and pan
+  let viewBox = $derived.by(() => {
+    const fullW = config.width + labelPad * 2;
+    const fullH = config.height + labelPad * 2;
+    const w = fullW / zoomLevel;
+    const h = fullH / zoomLevel;
+    // Center the view, then apply pan offset
+    const x = -labelPad + (fullW - w) / 2 - panX;
+    const y = -labelPad + (fullH - h) / 2 - panY;
+    return `${x} ${y} ${w} ${h}`;
+  });
 
   const colors = {
     board: '#1a5c1a',
@@ -132,6 +151,7 @@
   function onItemPointerDown(e, inst, kind) {
     e.preventDefault();
     e.stopPropagation();
+    onSelect(inst.id);
     const pt = getSvgPoint(e);
     dragging = {
       instanceId: inst.id,
@@ -184,18 +204,135 @@
 
   function onPointerUp() {
     dragging = null;
+    isPanning = false;
+    panStartPt = null;
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('touchmove', onTouchMove);
   }
+
+  function onPreviewWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    zoomLevel = Math.max(1, Math.min(10, zoomLevel + delta * zoomLevel));
+  }
+
+  function onPreviewPointerDown(e) {
+    // Middle mouse button or Ctrl+Left for panning the view
+    if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+      e.preventDefault();
+      isPanning = true;
+      panStartPt = { x: e.clientX, y: e.clientY, panX, panY };
+      window.addEventListener('pointermove', onPanMove);
+      window.addEventListener('pointerup', onPanUp);
+    } else if (e.button === 0 && !e.ctrlKey) {
+      // Only deselect when clicking on the SVG itself or the board rect,
+      // not when clicking on adapter/module overlays (those handle their own selection)
+      const tag = e.target.tagName;
+      const isBackground = e.target === svgEl || e.target.closest('.module-overlay, .adapter-overlay') === null;
+      if (isBackground) {
+        onSelect(null);
+      }
+    }
+  }
+
+  function onPanMove(e) {
+    if (!isPanning || !panStartPt || !svgEl) return;
+    const rect = svgEl.getBoundingClientRect();
+    const fullW = config.width + labelPad * 2;
+    const fullH = config.height + labelPad * 2;
+    // Convert pixel delta to board-mm delta
+    const scaleX = (fullW / zoomLevel) / rect.width;
+    const scaleY = (fullH / zoomLevel) / rect.height;
+    panX = panStartPt.panX + (e.clientX - panStartPt.x) * scaleX;
+    panY = panStartPt.panY + (e.clientY - panStartPt.y) * scaleY;
+  }
+
+  function onPanUp() {
+    isPanning = false;
+    panStartPt = null;
+    window.removeEventListener('pointermove', onPanMove);
+    window.removeEventListener('pointerup', onPanUp);
+  }
+
+  // ── Touch gestures for mobile (2-finger pan + pinch zoom) ──
+  let touchState = $state(null); // { startTouches, startPanX, startPanY, startZoom }
+
+  function getTouchCenter(touches) {
+    const t0 = touches[0], t1 = touches[1];
+    return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+  }
+
+  function getTouchDist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function onPreviewTouchStart(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      touchState = {
+        startDist: getTouchDist(e.touches),
+        startCenter: getTouchCenter(e.touches),
+        startPanX: panX,
+        startPanY: panY,
+        startZoom: zoomLevel,
+      };
+    }
+  }
+
+  function onPreviewTouchMove(e) {
+    if (e.touches.length === 2 && touchState) {
+      e.preventDefault();
+      const rect = svgEl?.getBoundingClientRect();
+      if (!rect) return;
+
+      const fullW = config.width + labelPad * 2;
+      const fullH = config.height + labelPad * 2;
+      const scaleX = (fullW / zoomLevel) / rect.width;
+      const scaleY = (fullH / zoomLevel) / rect.height;
+
+      // Pinch zoom
+      const newDist = getTouchDist(e.touches);
+      const zoomDelta = newDist / touchState.startDist;
+      zoomLevel = Math.max(1, Math.min(10, touchState.startZoom * zoomDelta));
+
+      // Two-finger pan
+      const newCenter = getTouchCenter(e.touches);
+      const dx = newCenter.x - touchState.startCenter.x;
+      const dy = newCenter.y - touchState.startCenter.y;
+      panX = touchState.startPanX + dx * scaleX;
+      panY = touchState.startPanY - dy * scaleY;
+    }
+  }
+
+  function onPreviewTouchEnd(e) {
+    if (e.touches.length < 2) {
+      touchState = null;
+    }
+  }
+
+  function resetView() {
+    zoomLevel = 1;
+    panX = 0;    
+    panY = 0;
+  }
 </script>
 
-<svg
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="preview-container" style="position: relative;">
+  <svg
   bind:this={svgEl}
   viewBox={viewBox}
   xmlns="http://www.w3.org/2000/svg"
   class="pcb-preview"
   class:has-modules={modules.length > 0 || adapters.length > 0}
+  onwheel={onPreviewWheel}
+  onpointerdown={onPreviewPointerDown}
+  ontouchstart={onPreviewTouchStart}
+  ontouchmove={onPreviewTouchMove}
+  ontouchend={onPreviewTouchEnd}
 >
   <!-- Flip Y axis: Gerber Y=0 is bottom, SVG Y=0 is top -->
   <g transform="scale(1,-1) translate(0,{-config.height})">
@@ -281,12 +418,12 @@
       fill="none"
     />
      {/each}
-
   
   
   <!-- Module overlays -->
   {#each modules as inst (inst.id)}
     {@const m = moduleToMm(inst)}
+    {@const isSelected = selectedInstanceId === inst.id}
     {#if m}
       {@const outW = m.rm.outline.width}
       {@const outH = m.rm.outline.height}
@@ -305,6 +442,22 @@
         onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
         style="cursor: grab;"
       >
+        <!-- Selection highlight -->
+        {#if isSelected}
+          <rect
+            x={m.x - ofsX - 0.8}
+            y={m.y - ofsY - 0.8}
+            width={outW + 1.6}
+            height={outH + 1.6}
+            fill="none"
+            stroke="#89b4fa"
+            stroke-width="0.35"
+            stroke-dasharray="0.8 0.4"
+            rx="0.6"
+            opacity="0.9"
+          />
+        {/if}
+
         <!-- Module body outline -->
         <rect
           x={m.x - ofsX}
@@ -354,6 +507,7 @@
   {#each adapters as inst (inst.id)}
     {@const a = adapterToMm(inst)}
     {@const hasConflict = adapterConflicts.has(inst.id)}
+    {@const isSelected = selectedInstanceId === inst.id}
     {#if a}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g class="module-overlay adapter-overlay"
@@ -361,6 +515,21 @@
         class:conflict={hasConflict}
         onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
         style="cursor: grab;">
+
+        <!-- Selection highlight -->
+        {#if isSelected}
+          <rect
+            x={a.x - 0.8}
+            y={a.y - 0.8}
+            width={(a.def.widthPins - 1) * a.pitch + 1.6}
+            height={(a.def.heightPins - 1) * a.pitch + 1.6}
+            fill="none"
+            stroke="#f9e2af"
+            stroke-width="0.25"
+            stroke-dasharray="0.6 0.3"
+            rx="0.4"
+          />
+        {/if}
         
         <!-- Conflict highlight background -->
         {#if hasConflict}
@@ -434,7 +603,22 @@
   </g>
 </svg>
 
+<!-- Zoom controls overlay -->
+<div class="zoom-controls">
+  <button class="zoom-btn" onclick={resetView} title="Reset view">⟲</button>
+  <button class="zoom-btn" onclick={() => zoomLevel = Math.max(1, zoomLevel / 1.3)} title="Zoom out">−</button>
+  <input type="range" class="zoom-slider" min="1" max="10" step="0.1"
+    bind:value={zoomLevel} title="Zoom: {Math.round(zoomLevel * 100)}%" />
+  <button class="zoom-btn" onclick={() => zoomLevel = Math.min(10, zoomLevel * 1.3)} title="Zoom in">+</button>
+  <span class="zoom-label">{Math.round(zoomLevel * 100)}%</span>
+</div>
+</div>
+
 <style>
+  .preview-container {
+    position: relative;
+  }
+
   .pcb-preview {
     width: 100%;
     height: auto;
@@ -445,7 +629,71 @@
   }
   
     .pcb-preview.has-modules {
-    touch-action: pan-x pan-y;
+    touch-action: none;
+    /*touch-action: pan-x pan-y;*/
+  }
+
+  .zoom-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(20, 20, 30, 0.85);
+    backdrop-filter: blur(4px);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .zoom-btn {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: #ccc;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .zoom-btn:hover {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+  }
+
+  .zoom-slider {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #e94560;
+    cursor: pointer;
+  }
+
+  .zoom-label {
+    font-size: 10px;
+    color: #888;
+    min-width: 36px;
+    text-align: right;
+    font-family: monospace;
   }
   
   .module-overlay {

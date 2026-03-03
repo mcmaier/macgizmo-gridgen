@@ -2,7 +2,7 @@
   import { MODULE_LIBRARY } from '../lib/modules.js';
     import { ADAPTER_LIBRARY } from '../lib/adapters.js';
 
-  let { modules = $bindable(), adapters = $bindable(), config } = $props();
+  let { modules = $bindable(), adapters = $bindable(), config, selectedInstanceId, onSelect } = $props();
   let selectedModuleId = $state('');
   let selectedAdapterId = $state('');
 
@@ -123,6 +123,7 @@ function addModule() {
   }
 
   function clearAll() {
+    onSelect(null);
     adapters = [];
     modules = [];
   }
@@ -174,19 +175,29 @@ function addModule() {
     <div class="placing-toolbar">
       <div class="placed-list">
         {#each adapters as inst (inst.id)}
-          <span class="placed-tag adapter-tag" style="border-color: {inst.color}">
-            ⚡ {inst.name}
-            <button class="rotate-btn" onclick={() => rotateAdapter(inst.id)} title="Rotate 90°">↻</button>
-            <button class="remove-btn" onclick={() => removeAdapter(inst.id)} title="Remove">×</button>
-          </span>
-        {/each}
-        {#each modules as inst (inst.id)}
-          <span class="placed-tag" style="border-color: {inst.color}">
-            {inst.name}
-            <button class="rotate-btn" onclick={() => rotateModule(inst.id)} title="Rotate 90°">↻</button>
-            <button class="remove-btn" onclick={() => removeModule(inst.id)} title="Remove">×</button>
-          </span>
-        {/each}      
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="placed-tag adapter-tag" class:selected={selectedInstanceId === inst.id}
+          style="border-color: {selectedInstanceId === inst.id ? '#f9e2af' : inst.color}" role="button" tabindex="0"
+          onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
+          onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}>
+          ⚡ {inst.name}
+          <span class="tag-pos">({inst.col},{inst.row})</span>
+          <button type="button" class="rotate-btn" onclick={(e) => { e.stopPropagation(); rotateAdapter(inst.id); }} title="Rotate 90°">↻</button>
+          <button type="button" class="remove-btn" onclick={(e) => { e.stopPropagation(); removeAdapter(inst.id); }} title="Remove">×</button>
+        </div>
+      {/each}
+      {#each modules as inst (inst.id)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="placed-tag" class:selected={selectedInstanceId === inst.id}
+          style="border-color: {selectedInstanceId === inst.id ? '#89b4fa' : inst.color}" role="button" tabindex="0"
+           onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
+          onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}>
+         {inst.name}
+          <span class="tag-pos">({inst.col},{inst.row})</span>
+          <button type="button" class="rotate-btn" onclick={(e) => { e.stopPropagation(); rotateModule(inst.id); }} title="Rotate 90°">↻</button>
+          <button type="button" class="remove-btn" onclick={(e) => { e.stopPropagation(); removeModule(inst.id); }} title="Remove">×</button>
+        </div>
+      {/each}   
       </div>
       <div>
         <button class="place-btn clear-btn" onclick={clearAll}>Clear All</button>
@@ -304,10 +315,40 @@ function addModule() {
     border-radius: 4px;
     color: #cdd6f4;
     font-size: 12px;
+        cursor: pointer;
+    transition: background 0.1s, box-shadow 0.1s;
+  }
+
+  .placed-tag:hover {
+    background: #3a3a50;
   }
   
   .adapter-tag {
     background: #3a3520;
+  }
+
+  .adapter-tag:hover {
+    background: #4a4530;
+  }
+
+  .placed-tag.selected {
+    background: #3a3a6a !important;
+    border-color: #89b4fa !important;
+    border-left-width: 3px;
+    outline: 1px solid #89b4fa;
+    outline-offset: 1px;
+  }
+
+  .adapter-tag.selected {
+    background: #5a5020 !important;
+    border-color: #f9e2af !important;
+    outline-color: #f9e2af;
+  }
+
+  .tag-pos {
+    font-size: 10px;
+    color: #7f849c;
+    font-family: monospace;
   }
 
     .rotate-btn {
