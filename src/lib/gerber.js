@@ -281,8 +281,7 @@ export function generatePowerRailTraces(config, placedAdapters = []) {
   const { gridLeft, gridTop, gridRight, gridBottom } = computeGrid(config);
   const holes = computeMountingHoles(config);
 
-  // Build adapter obstacle data with per-edge TH info
-  // Margins depend on trace direction vs. which edges have TH pads
+  // Build adapter obstacle data with TH pin positions for per-crossing margin
   const marginTH = pitch * 0.1;   // rail can reach TH pad
   const marginSMD = pitch * 0.6;  // must clear SMD features
 
@@ -293,16 +292,19 @@ export function generatePowerRailTraces(config, placedAdapters = []) {
     const ax = gridLeft + (inst.col || 0) * pitch;
     const ay = gridBottom + (inst.row || 0) * pitch;
     const thPins = adapter.throughPins || [];
+    
+    // Pre-compute absolute TH pin positions
+    const thPositions = thPins.map(p => ({
+      x: ax + p.col * pitch,
+      y: ay + p.row * pitch,
+    }));
 
     adapterObstacles.push({
       xMin: ax,
       xMax: ax + (adapter.widthPins - 1) * pitch,
       yMin: ay,
       yMax: ay + (adapter.heightPins - 1) * pitch,
-      hasLeftTH:   thPins.some(p => p.col === 0),
-      hasRightTH:  thPins.some(p => p.col === adapter.widthPins - 1),
-      hasBottomTH: thPins.some(p => p.row === 0),
-      hasTopTH:    thPins.some(p => p.row === adapter.heightPins - 1),
+      thPositions,
     });
   }
 
@@ -369,8 +371,16 @@ function clipTraceAroundObstacles(trace, holes, obstacles, marginTH, marginSMD) 
   const { x1, y1, x2, y2, type } = trace;
   const isHorizontal = Math.abs(y1 - y2) < 0.001;
   const isVertical = Math.abs(x1 - x2) < 0.001;
+  const eps = 0.01; // tolerance for coordinate matching
 
   if (!isHorizontal && !isVertical) return [trace];
+
+  // Check if a TH pin exists at approximately (tx, ty)
+  function hasTHAt(ob, tx, ty) {
+    return ob.thPositions.some(p =>
+      Math.abs(p.x - tx) < eps && Math.abs(p.y - ty) < eps
+    );
+  }
 
   if (isHorizontal) {
     const y = y1;
@@ -387,15 +397,19 @@ function clipTraceAroundObstacles(trace, holes, obstacles, marginTH, marginSMD) 
       exclusions.push([h.x - halfChord, h.x + halfChord]);
     }
 
-    // Horizontal trace: enters adapter from left, exits right
+    // Horizontal trace at Y=y: check if it passes through adapter's Y range,
+    // then for left/right edges check if TH pin exists at that specific crossing
     for (const ob of obstacles) {
-      const mTop    = ob.hasTopTH    ? marginTH : marginSMD;
-      const mBottom = ob.hasBottomTH ? marginTH : marginSMD;
-      if (y >= ob.yMin - mBottom && y <= ob.yMax + mTop) {
-        const mLeft  = ob.hasLeftTH  ? marginTH : marginSMD;
-        const mRight = ob.hasRightTH ? marginTH : marginSMD;
-        exclusions.push([ob.xMin - mLeft, ob.xMax + mRight]);
-      }
+      // Does the trace Y fall within the adapter rectangle (with margin)?
+      const mBottom = hasTHAt(ob, ob.xMin, y) || hasTHAt(ob, ob.xMax, y) ? marginTH : marginSMD;
+      const mTop = mBottom; // same logic for Y range check
+      if (y < ob.yMin - mTop || y > ob.yMax + mTop) continue;
+
+      // Left edge: is there a TH pin at (xMin, y)?
+      const mLeft  = hasTHAt(ob, ob.xMin, y) ? marginTH : marginSMD;
+      // Right edge: is there a TH pin at (xMax, y)?
+      const mRight = hasTHAt(ob, ob.xMax, y) ? marginTH : marginSMD;
+      exclusions.push([ob.xMin - mLeft, ob.xMax + mRight]);
     }
 
     return buildSegments(minX, maxX, exclusions, (a, b) => ({
@@ -416,15 +430,18 @@ function clipTraceAroundObstacles(trace, holes, obstacles, marginTH, marginSMD) 
       exclusions.push([h.y - halfChord, h.y + halfChord]);
     }
 
-    // Vertical trace: enters adapter from bottom, exits top
+    // Vertical trace at X=x: check if it passes through adapter's X range,
+    // then for top/bottom edges check if TH pin exists at that specific crossing
     for (const ob of obstacles) {
-      const mLeft  = ob.hasLeftTH  ? marginTH : marginSMD;
-      const mRight = ob.hasRightTH ? marginTH : marginSMD;
-      if (x >= ob.xMin - mLeft && x <= ob.xMax + mRight) {
-        const mBottom = ob.hasBottomTH ? marginTH : marginSMD;
-        const mTop    = ob.hasTopTH    ? marginTH : marginSMD;
-        exclusions.push([ob.yMin - mBottom, ob.yMax + mTop]);
-      }
+      const mLeft = hasTHAt(ob, x, ob.yMin) || hasTHAt(ob, x, ob.yMax) ? marginTH : marginSMD;
+      const mRight = mLeft;
+      if (x < ob.xMin - mLeft || x > ob.xMax + mLeft) continue;
+
+      // Bottom edge: is there a TH pin at (x, yMin)?
+      const mBottom = hasTHAt(ob, x, ob.yMin) ? marginTH : marginSMD;
+      // Top edge: is there a TH pin at (x, yMax)?
+      const mTop    = hasTHAt(ob, x, ob.yMax) ? marginTH : marginSMD;
+      exclusions.push([ob.yMin - mBottom, ob.yMax + mTop]);
     }
 
     return buildSegments(minY, maxY, exclusions, (a, b) => ({

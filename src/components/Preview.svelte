@@ -1,5 +1,5 @@
 <script>
-  import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN } from '../lib/gerber.js';
+  import { computeGrid, generatePadPositions, generatePowerRailTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN, isInKeepout } from '../lib/gerber.js';
   import { getRotatedModule } from '../lib/modules.js';
   import { getRotatedAdapter } from '../lib/adapters.js';
   
@@ -25,6 +25,8 @@
   let adapterConflicts = $derived.by(() => {
     const conflicts = new Set(); // adapter instance IDs with problems
     const occupied = new Map();  // "col,row" → adapter instance ID
+    const holes = mountHoles;
+    const pitch = config.pitch;
 
     for (const inst of adapters) {
       const def = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
@@ -39,6 +41,15 @@
           if (gc < 0 || gc >= grid.cols || gr < 0 || gr >= grid.rows) {
             conflicts.add(inst.id);
             continue;
+          }
+
+          // Overlaps mounting hole keepout?
+          if (holes.length > 0) {
+            const px = grid.gridLeft + gc * pitch;
+            const py = grid.gridBottom + gr * pitch;
+            if (isInKeepout(px, py, holes)) {
+              conflicts.add(inst.id);
+            }
           }
 
           const key = `${gc},${gr}`;
@@ -309,7 +320,7 @@
       const dx = newCenter.x - touchState.startCenter.x;
       const dy = newCenter.y - touchState.startCenter.y;
       panX = touchState.startPanX + dx * scaleX;
-      panY = touchState.startPanY - dy * scaleY;
+      panY = touchState.startPanY + dy * scaleY;
     }
   }
 
@@ -628,9 +639,8 @@
     padding: 8px;
   }
   
-    .pcb-preview.has-modules {
+    .pcb-preview {
     touch-action: none;
-    /*touch-action: pan-x pan-y;*/
   }
 
   .zoom-controls {
