@@ -16,7 +16,7 @@
   })));
 
   let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
-  let traces = $derived(generatePowerRailTraces(fullConfig));
+  let traces = $derived(generatePowerRailTraces(fullConfig, resolvedAdapters));
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
   let grid = $derived(computeGrid(fullConfig));
@@ -255,6 +255,12 @@
     window.removeEventListener('pointerup', onPanUp);
   }
 
+    function resetView() {
+    zoomLevel = 1;
+    panX = 0;    
+    panY = 0;
+  }
+
   // ── Touch gestures for mobile (2-finger pan + pinch zoom) ──
   let touchState = $state(null); // { startTouches, startPanX, startPanY, startZoom }
 
@@ -311,12 +317,6 @@
     if (e.touches.length < 2) {
       touchState = null;
     }
-  }
-
-  function resetView() {
-    zoomLevel = 1;
-    panX = 0;    
-    panY = 0;
   }
 </script>
 

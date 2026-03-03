@@ -276,10 +276,35 @@ function classifyPad(col, row, cols, rows, rails) {
  * Each rail is a straight line connecting pads of the same type.
  * Traces that intersect keepout zones are split into segments.
  */
-export function generatePowerRailTraces(config) {
+export function generatePowerRailTraces(config, placedAdapters = []) {
   const { powerRails, pitch } = config;
   const { gridLeft, gridTop, gridRight, gridBottom } = computeGrid(config);
   const holes = computeMountingHoles(config);
+
+  // Build adapter obstacle data with per-edge TH info
+  // Margins depend on trace direction vs. which edges have TH pads
+  const marginTH = pitch * 0.1;   // rail can reach TH pad
+  const marginSMD = pitch * 0.6;  // must clear SMD features
+
+  const adapterObstacles = [];
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+    const ax = gridLeft + (inst.col || 0) * pitch;
+    const ay = gridBottom + (inst.row || 0) * pitch;
+    const thPins = adapter.throughPins || [];
+
+    adapterObstacles.push({
+      xMin: ax,
+      xMax: ax + (adapter.widthPins - 1) * pitch,
+      yMin: ay,
+      yMax: ay + (adapter.heightPins - 1) * pitch,
+      hasLeftTH:   thPins.some(p => p.col === 0),
+      hasRightTH:  thPins.some(p => p.col === adapter.widthPins - 1),
+      hasBottomTH: thPins.some(p => p.row === 0),
+      hasTopTH:    thPins.some(p => p.row === adapter.heightPins - 1),
+    });
+  }
 
   const rawTraces = [];
 
@@ -320,13 +345,11 @@ export function generatePowerRailTraces(config) {
     rawTraces.push({ x1: x0, y1: gridTop, x2: x0, y2: gridBottom, type: 'vcc' });
     rawTraces.push({ x1: x1g, y1: gndY1, x2: x1g, y2: gndY2, type: 'gnd' });
   }
-
-  // Clip all traces around mounting hole keepout zones
-  if (holes.length === 0) return rawTraces;
-
+  
+  // Clip traces around mounting holes AND adapter footprints
   const clipped = [];
   for (const trace of rawTraces) {
-    const segments = clipTraceAroundHoles(trace, holes);
+    const segments = clipTraceAroundObstacles(trace, holes, adapterObstacles, marginTH, marginSMD);
     clipped.push(...segments);
   }
   return clipped;
@@ -335,53 +358,73 @@ export function generatePowerRailTraces(config) {
 }
 
 /**
- * Clip a single trace (horizontal or vertical) around circular keepout zones.
- * Returns an array of trace segments that don't intersect any keepout.
+ * Clip a single trace around circular keepout zones AND adapter obstacles.
+ * Margin per edge depends on trace direction vs which edges have TH pads:
+ * - Horizontal trace enters left/exits right: use hasLeftTH/hasRightTH for X margins
+ * - Vertical trace enters bottom/exits top: use hasBottomTH/hasTopTH for Y margins
+ * The cross-axis check (does the trace pass through the obstacle?) uses the
+ * perpendicular edge margins.
  */
-function clipTraceAroundHoles(trace, holes) {
+function clipTraceAroundObstacles(trace, holes, obstacles, marginTH, marginSMD) {
   const { x1, y1, x2, y2, type } = trace;
   const isHorizontal = Math.abs(y1 - y2) < 0.001;
   const isVertical = Math.abs(x1 - x2) < 0.001;
 
-  if (!isHorizontal && !isVertical) return [trace]; // safety: only axis-aligned
+  if (!isHorizontal && !isVertical) return [trace];
 
   if (isHorizontal) {
-    // Trace runs along Y=y1 from x1 to x2
     const y = y1;
     const minX = Math.min(x1, x2);
     const maxX = Math.max(x1, x2);
-
-    // Collect exclusion intervals [start, end] along X axis
     const exclusions = [];
+
+    // Circular hole exclusions
     for (const h of holes) {
       const dy = Math.abs(y - h.y);
       const r = h.keepout / 2;
-      if (dy >= r) continue; // trace doesn't pass through this keepout
-      // Half-chord length at this Y distance
+      if (dy >= r) continue;
       const halfChord = Math.sqrt(r * r - dy * dy);
-      const exStart = h.x - halfChord;
-      const exEnd = h.x + halfChord;
-      exclusions.push([exStart, exEnd]);
+      exclusions.push([h.x - halfChord, h.x + halfChord]);
+    }
+
+    // Horizontal trace: enters adapter from left, exits right
+    for (const ob of obstacles) {
+      const mTop    = ob.hasTopTH    ? marginTH : marginSMD;
+      const mBottom = ob.hasBottomTH ? marginTH : marginSMD;
+      if (y >= ob.yMin - mBottom && y <= ob.yMax + mTop) {
+        const mLeft  = ob.hasLeftTH  ? marginTH : marginSMD;
+        const mRight = ob.hasRightTH ? marginTH : marginSMD;
+        exclusions.push([ob.xMin - mLeft, ob.xMax + mRight]);
+      }
     }
 
     return buildSegments(minX, maxX, exclusions, (a, b) => ({
       x1: a, y1: y, x2: b, y2: y, type
     }));
   } else {
-    // Vertical: trace runs along X=x1 from y1 to y2
     const x = x1;
     const minY = Math.min(y1, y2);
     const maxY = Math.max(y1, y2);
-
     const exclusions = [];
+
+    // Circular hole exclusions
     for (const h of holes) {
       const dx = Math.abs(x - h.x);
       const r = h.keepout / 2;
       if (dx >= r) continue;
       const halfChord = Math.sqrt(r * r - dx * dx);
-      const exStart = h.y - halfChord;
-      const exEnd = h.y + halfChord;
-      exclusions.push([exStart, exEnd]);
+      exclusions.push([h.y - halfChord, h.y + halfChord]);
+    }
+
+    // Vertical trace: enters adapter from bottom, exits top
+    for (const ob of obstacles) {
+      const mLeft  = ob.hasLeftTH  ? marginTH : marginSMD;
+      const mRight = ob.hasRightTH ? marginTH : marginSMD;
+      if (x >= ob.xMin - mLeft && x <= ob.xMax + mRight) {
+        const mBottom = ob.hasBottomTH ? marginTH : marginSMD;
+        const mTop    = ob.hasTopTH    ? marginTH : marginSMD;
+        exclusions.push([ob.yMin - mBottom, ob.yMax + mTop]);
+      }
     }
 
     return buildSegments(minY, maxY, exclusions, (a, b) => ({
@@ -469,7 +512,7 @@ export function generateEdgeCuts(config) {
 
 export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters = []) {
   const pads = generatePadPositions(config, placedAdapters);
-  const traces = generatePowerRailTraces(config);
+  const traces = generatePowerRailTraces(config, placedAdapters);
   const holes = computeMountingHoles(config);
   const { padDiameter, annularRing, pitch } = config;
   const { gridLeft, gridBottom } = computeGrid(config);
