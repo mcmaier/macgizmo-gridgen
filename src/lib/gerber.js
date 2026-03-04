@@ -591,9 +591,34 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
       }
     }
   } else {
-      // B.Cu: render SMD pad matrix under adapter area
-      // Unconnected pads on 1.27mm grid for hand-soldering
-      // 0805/1206 components like bypass caps and pull-up resistors.
+      // B.Cu: render either custom copperBack (circuit modules) or auto SMD pad matrix (simple adapters)
+      const isComplexAdapter = adapter.features.copperBack || adapter.features.drills;
+      
+      if (isComplexAdapter) {
+        // Complex adapter: render pre-routed B.Cu features from copperBack
+        if (adapter.features.copperBack) {
+          for (const f of adapter.features.copperBack) {
+            if (f.type === 'pad') {
+              const key = `${f.w.toFixed(4)},${f.h.toFixed(4)}`;
+              if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+              adapterFeatures.push({
+                type: 'pad', x: originX + f.x, y: originY + f.y,
+                aperture: rectApertures.get(key),
+              });
+            } else if (f.type === 'trace') {
+              const key = `T${f.w.toFixed(4)}`;
+              if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+              adapterFeatures.push({
+                type: 'trace',
+                x1: originX + f.x1, y1: originY + f.y1,
+                x2: originX + f.x2, y2: originY + f.y2,
+                aperture: rectApertures.get(key),
+              });
+            }
+          }
+        }
+      } else {
+      // Simple adapter: auto-generate SMD pad matrix for hand-soldering
       const smdPadSize = SMD_PAD_SIZE;
       const smdGridPitch = SMD_PAD_GRID;
       const key = `${smdPadSize.toFixed(4)},${smdPadSize.toFixed(4)}`;
@@ -602,7 +627,6 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
       
       // Fill the entire adapter rectangle with SMD pads,
       // filtering out any position too close to a TH drill hole.
-      // This works correctly for all adapter shapes and rotations.
       const startX = originX;
       const endX   = originX + (adapter.widthPins - 1) * pitch;
       const startY = originY;
@@ -614,7 +638,6 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
         for (let sy = startY; sy <= endY; sy += smdGridPitch) {
           const rx = round4(sx);
           const ry = round4(sy);
-          // Skip positions too close to any TH drill hole
           let tooClose = false;
           for (const pin of adapter.throughPins) {
             const tx = originX + pin.col * pitch;
@@ -630,6 +653,7 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
         }
       }
     }
+  }
 
     // Through-hole pads at adapter pin positions (both layers, deduplicated)
     for (const pin of adapter.throughPins) {
@@ -641,11 +665,26 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
         adapterFeatures.push({ type: 'th', x, y });
       }
     }
+    
+    // Via annular rings (both copper layers)
+    if (adapter.features.drills) {
+      for (const v of adapter.features.drills) {
+        const vx = round4(originX + v.x);
+        const vy = round4(originY + v.y);
+        const viaKey = `V${v.size.toFixed(4)}`;
+        if (!rectApertures.has(viaKey)) rectApertures.set(viaKey, nextAperture++);
+        adapterFeatures.push({ type: 'pad', x: vx, y: vy, aperture: rectApertures.get(viaKey), isCircle: true });
+      }
+    }
   }
 
   // Define adapter apertures
-  for (const [key, num] of rectApertures) {
-    if (key.startsWith('T')) {
+  for (const [key, num] of rectApertures) {    
+    if (key.startsWith('V')) {
+      // Via circle aperture
+      const d = parseFloat(key.slice(1));
+      gerber += `%ADD${num}C,${d.toFixed(6)}*%\n`;
+    } else if (key.startsWith('T')) {
       gerber += `%ADD${num}C,${parseFloat(key.substring(1)).toFixed(6)}*%\n`;
     } else {
       const [w, h] = key.split(',').map(Number);
@@ -729,7 +768,35 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
       }
     }
   } else {
-      // B.Mask: mask openings for SMD pad matrix (matching B.Cu pads)
+      // B.Mask: mask openings matching B.Cu pads
+      const isComplexAdapter = adapter.features.copperBack || adapter.features.drills;
+      
+      if (isComplexAdapter) {
+        // Complex adapter: mask openings for copperBack pads + via annular rings
+        if (adapter.features.copperBack) {
+          for (const f of adapter.features.copperBack) {
+            if (f.type === 'pad') {
+              const mw = f.w + maskExpansion * 2;
+              const mh = f.h + maskExpansion * 2;
+              const key = `${mw.toFixed(4)},${mh.toFixed(4)}`;
+              if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
+              adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
+            }
+          }
+        }
+        // Via mask openings
+        if (adapter.features.drills) {
+          for (const v of adapter.features.drills) {
+            const viaMaskSize = v.size + maskExpansion * 2;
+            const key = `V${viaMaskSize.toFixed(4)}`;
+            if (!rectApertures.has(key)) {
+              rectApertures.set(key, nextAperture++);
+            }
+            adapterMask.push({ x: originX + v.x, y: originY + v.y, aperture: rectApertures.get(key), isCircle: true, d: viaMaskSize });
+          }
+        }
+      } else {
+      // Simple adapter: auto-generate mask openings for SMD pad matrix
       const smdPadSize = SMD_PAD_SIZE;
       const smdMaskSize = smdPadSize + maskExpansion * 2;
       const smdGridPitch = SMD_PAD_GRID;
@@ -763,6 +830,7 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
         }
       }
     }
+  }
 
     // TH mask openings (both layers, deduplicated)
 for (const pin of adapter.throughPins) {
@@ -777,8 +845,18 @@ for (const pin of adapter.throughPins) {
   }
 
   for (const [key, num] of rectApertures) {
-    const [w, h] = key.split(',').map(Number);
-    gerber += `%ADD${num}R,${w.toFixed(6)}X${h.toFixed(6)}*%\n`;
+        if (key.startsWith('V')) {
+      // Via circle aperture
+      const d = parseFloat(key.slice(1));
+      gerber += `%ADD${num}C,${d.toFixed(6)}*%\n`;
+    } else if (key.startsWith('T')) {
+      // Trace aperture
+      const w = parseFloat(key.slice(1));
+      gerber += `%ADD${num}C,${w.toFixed(6)}*%\n`;
+    } else {
+      const [w, h] = key.split(',').map(Number);
+      gerber += `%ADD${num}R,${w.toFixed(6)}X${h.toFixed(6)}*%\n`;
+    }
   }
 
   gerber += `D10*\n`;
@@ -1095,20 +1173,46 @@ export function generateDrillFile(config, placedAdapters = []) {
   const { padDiameter, pitch } = config;
   const { gridLeft, gridBottom } = computeGrid(config);
 
+    // Pre-collect adapter via drills (grouped by drill size)
+  const viaDrills = new Map(); // drill diameter string -> [{x,y}]
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter || !adapter.features.drills) continue;
+    const originX = gridLeft + inst.col * pitch;
+    const originY = gridBottom + inst.row * pitch;
+    for (const v of adapter.features.drills) {
+      const d = v.drill.toFixed(3);
+      if (!viaDrills.has(d)) viaDrills.set(d, []);
+      viaDrills.get(d).push({
+        x: round4(originX + v.x),
+        y: round4(originY + v.y),
+      });
+    }
+  }
+
+  // Build header with all tool definitions
   let drill = `; MacGizmo GridGen - Parametric Prototype PCB\n`;
   drill += `; Drill file - Excellon format\n`;
   drill += `M48\n`;
   drill += `METRIC,TZ\n`;
   drill += `T1C${padDiameter.toFixed(3)}\n`;
 
-  // Separate tool for mounting holes if present
-  if (holes.length > 0) {
-    drill += `T2C${holes[0].diameter.toFixed(3)}\n`;
+  let nextTool = 2;
+  const mountTool = holes.length > 0 ? nextTool++ : null;
+  if (mountTool) {
+    drill += `T${mountTool}C${holes[0].diameter.toFixed(3)}\n`;
+  }
+
+  const viaToolMap = new Map();
+  for (const [d] of viaDrills) {
+    const toolNum = nextTool++;
+    viaToolMap.set(d, toolNum);
+    drill += `T${toolNum}C${d}\n`;
   }
 
   drill += `%\n`;
 
-  // Pad drill holes (grid pads, adapter TH pads excluded from grid)
+  // T1: Grid pad + adapter TH drill holes
   drill += `T1\n`;
   for (const pad of pads) {
     drill += `X${pad.x.toFixed(3)}Y${pad.y.toFixed(3)}\n`;
@@ -1130,9 +1234,17 @@ export function generateDrillFile(config, placedAdapters = []) {
     }
   }
 
-  // Mounting drill holes
-  if (holes.length > 0) {
-    drill += `T2\n`;
+ // Via drill holes (per tool)
+  for (const [d, toolNum] of viaToolMap) {
+    drill += `T${toolNum}\n`;
+    for (const pos of viaDrills.get(d)) {
+      drill += `X${pos.x.toFixed(3)}Y${pos.y.toFixed(3)}\n`;
+    }
+  }
+
+  // Mounting holes
+  if (mountTool) {
+    drill += `T${mountTool}\n`;
     for (const h of holes) {
       drill += `X${h.x.toFixed(3)}Y${h.y.toFixed(3)}\n`;
     }

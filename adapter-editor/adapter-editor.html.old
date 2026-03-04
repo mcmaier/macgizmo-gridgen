@@ -51,229 +51,6 @@ function parseKicadMod(text) {
   return { pads, silkLines, bodyPoly };
 }
 
-/**
- * Parse RS-274X Gerber file. Extracts flashed pads and drawn traces.
- * Returns { pads: [{x, y, w, h, shape}], traces: [{x1, y1, x2, y2, w}] }
- */
-
-/**
- * Parse RS-274X Gerber file. Extracts flashed pads and drawn traces.
- */
-function parseGerber(text) {
-  const apertures = {};
-  const pads = [];
-  const traces = [];
-  let unitMul = 1, fmtDecX = 4, fmtDecY = 4;
-  const rawLines = text.replace(/\r/g, "").split("\n");
-  for (let line of rawLines) {
-    line = line.trim();
-    if (!line) continue;
-    let m = line.match(/%FSLA?X(\d)(\d)Y(\d)(\d)\*%/);
-    if (m) { fmtDecX = parseInt(m[2]); fmtDecY = parseInt(m[4]); continue; }
-    if (line.includes("%MOMM*%")) { unitMul = 1; continue; }
-    if (line.includes("%MOIN*%")) { unitMul = 25.4; continue; }
-    m = line.match(/%ADD(\d+)([A-Z]),?([\d.]+)?(?:X([\d.]+))?\*%/);
-    if (m) {
-      const dc = parseInt(m[1]), shape = m[2];
-      const p1 = parseFloat(m[3] || 0) * unitMul;
-      const p2 = m[4] ? parseFloat(m[4]) * unitMul : p1;
-      if (shape === "C") apertures[dc] = { shape: "circle", d: p1 };
-      else if (shape === "R") apertures[dc] = { shape: "rect", w: p1, h: p2 };
-      else if (shape === "O") apertures[dc] = { shape: "oblong", w: p1, h: p2 };
-      continue;
-    }
-    if (line.startsWith("%") || line.startsWith("G04")) continue;
-  }
-  let curX = 0, curY = 0, prevX = 0, prevY = 0, curAp = null;
-  for (let line of rawLines) {
-    line = line.trim();
-    if (!line || line.startsWith("%") || line.startsWith("G04") || line === "M02*") continue;
-    let m = line.match(/^D(\d+)\*$/);
-    if (m) { curAp = parseInt(m[1]); continue; }
-    m = line.match(/^(?:X([-+]?\d+))?(?:Y([-+]?\d+))?D0([123])\*$/);
-    if (!m) continue;
-    prevX = curX; prevY = curY;
-    if (m[1] !== undefined) curX = (parseInt(m[1]) / Math.pow(10, fmtDecX)) * unitMul;
-    if (m[2] !== undefined) curY = (parseInt(m[2]) / Math.pow(10, fmtDecY)) * unitMul;
-    const op = parseInt(m[3]);
-    const ap = apertures[curAp] || {};
-    if (op === 3) {
-      if (ap.shape === "rect" || ap.shape === "oblong")
-        pads.push({ x: roundTo(curX,4), y: roundTo(curY,4), w: roundTo(ap.w,4), h: roundTo(ap.h,4) });
-      else if (ap.shape === "circle")
-        pads.push({ x: roundTo(curX,4), y: roundTo(curY,4), w: roundTo(ap.d,4), h: roundTo(ap.d,4) });
-    } else if (op === 1) {
-      const w = ap.shape === "circle" ? ap.d : (ap.w || 0.15);
-      traces.push({ x1: roundTo(prevX,4), y1: roundTo(prevY,4), x2: roundTo(curX,4), y2: roundTo(curY,4), w: roundTo(w,4) });
-    }
-  }
-  return { pads, traces };
-}
-
-/**
- * Parse KiCad .kicad_pcb file. Extracts pads (from footprints), traces, and vias
- * on F.Cu and B.Cu, with board-relative coordinates (Y-down KiCad convention).
- */
-function parseKicadPcb(text) {
-  text = text.replace(/\r/g, "");
-
-  // 1) Find board outline from Edge.Cuts gr_line/gr_rect
-  let boardLeft = Infinity, boardTop = Infinity, boardRight = -Infinity, boardBottom = -Infinity;
-  // Look for gr_line on Edge.Cuts
-  const grLineRe = /\(gr_line\s+\(start\s+([\d.]+)\s+([\d.]+)\)\s+\(end\s+([\d.]+)\s+([\d.]+)\)[\s\S]*?\(layer\s+"Edge\.Cuts"\)/g;
-  let m;
-  while ((m = grLineRe.exec(text)) !== null) {
-    for (const v of [parseFloat(m[1]), parseFloat(m[3])]) { boardLeft = Math.min(boardLeft, v); boardRight = Math.max(boardRight, v); }
-    for (const v of [parseFloat(m[2]), parseFloat(m[4])]) { boardTop = Math.min(boardTop, v); boardBottom = Math.max(boardBottom, v); }
-  }
-  if (boardLeft === Infinity) return { error: "No board outline found on Edge.Cuts" };
-
-  const boardW = roundTo(boardRight - boardLeft, 4);
-  const boardH = roundTo(boardBottom - boardTop, 4);
-
-  // 2) Extract pads from footprints with absolute coordinates
-  const fcuPads = [], bcuPads = [];
-  // Split into footprint blocks
-  const fpRe = /\(footprint\s+"([^"]+)"([\s\S]*?)\n\t\)/g;
-  while ((m = fpRe.exec(text)) !== null) {
-    const fpName = m[1].split(":").pop();
-    const fpBody = m[2];
-    const atMatch = fpBody.match(/^\s*\(at\s+([\d.]+)\s+([\d.]+)(?:\s+([-\d.]+))?\)/m);
-    if (!atMatch) continue;
-    const fx = parseFloat(atMatch[1]), fy = parseFloat(atMatch[2]);
-    const fDeg = parseFloat(atMatch[3] || 0);
-    const fRad = fDeg * Math.PI / 180;
-    const cosR = Math.cos(fRad), sinR = Math.sin(fRad);
-
-    const padRe = /\(pad\s+"([^"]+)"\s+(\w+)\s+(\w+)\s+\(at\s+([-\d.]+)\s+([-\d.]+)(?:\s+([-\d.]+))?\)\s+\(size\s+([-\d.]+)\s+([-\d.]+)\)(?:[\s\S]*?\(drill\s+([\d.]+)\))?[\s\S]*?\(layers\s+"([^"]*)"(?:\s+"([^"]*)")?(?:\s+"([^"]*)")?\)/g;
-    let pm;
-    while ((pm = padRe.exec(fpBody)) !== null) {
-      const pin = pm[1], ptype = pm[2], pshape = pm[3];
-      const px = parseFloat(pm[4]), py = parseFloat(pm[5]);
-      const pDeg = parseFloat(pm[6] || 0);
-      let sw = parseFloat(pm[7]), sh = parseFloat(pm[8]);
-      const drill = parseFloat(pm[9] || 0);
-      const layers = [pm[10], pm[11], pm[12]].filter(Boolean);
-
-      // Absolute position: rotate pad pos by footprint rotation
-      const ax = fx + px * cosR - py * sinR;
-      const ay = fy + px * sinR + py * cosR;
-
-      // Swap w/h based on absolute pad orientation
-      // KiCad stores pad rotation as absolute (world-relative) when footprint is rotated
-      // So the pad's own rotation already accounts for footprint rotation
-      const norm = ((pDeg % 360) + 360) % 360;
-      if (Math.abs(norm - 90) < 1 || Math.abs(norm - 270) < 1) {
-        [sw, sh] = [sh, sw];
-      }
-
-      // Board-relative coords (Y still KiCad-down at this point)
-      const rx = roundTo(ax - boardLeft, 4);
-      const ry = roundTo(ay - boardTop, 4);
-
-      const padData = { pin, fp: fpName, type: ptype, shape: pshape, x: rx, y: ry, w: roundTo(sw,4), h: roundTo(sh,4), drill };
-
-      if (ptype === "thru_hole" || layers.includes("F.Cu") && layers.includes("B.Cu")) {
-        fcuPads.push(padData);
-        bcuPads.push(padData);
-      } else if (layers.includes("F.Cu")) {
-        fcuPads.push(padData);
-      } else if (layers.includes("B.Cu")) {
-        bcuPads.push(padData);
-      }
-    }
-  }
-
-  // 3) Segments (traces)
-  const fcuTraces = [], bcuTraces = [];
-  const segRe = /\(segment\s+\(start\s+([\d.]+)\s+([\d.]+)\)\s+\(end\s+([\d.]+)\s+([\d.]+)\)\s+\(width\s+([\d.]+)\)\s+\(layer\s+"([^"]+)"\)\s+\(net\s+(\d+)\)/g;
-  while ((m = segRe.exec(text)) !== null) {
-    const t = {
-      x1: roundTo(parseFloat(m[1]) - boardLeft, 4),
-      y1: roundTo(parseFloat(m[2]) - boardTop, 4),
-      x2: roundTo(parseFloat(m[3]) - boardLeft, 4),
-      y2: roundTo(parseFloat(m[4]) - boardTop, 4),
-      w: parseFloat(m[5]),
-      net: parseInt(m[7]),
-    };
-    if (m[6] === "F.Cu") fcuTraces.push(t);
-    else if (m[6] === "B.Cu") bcuTraces.push(t);
-  }
-
-  // 4) Vias
-  const vias = [];
-  const viaRe = /\(via\s+\(at\s+([\d.]+)\s+([\d.]+)\)\s+\(size\s+([\d.]+)\)\s+\(drill\s+([\d.]+)\)/g;
-  while ((m = viaRe.exec(text)) !== null) {
-    vias.push({
-      x: roundTo(parseFloat(m[1]) - boardLeft, 4),
-      y: roundTo(parseFloat(m[2]) - boardTop, 4),
-      size: parseFloat(m[3]),
-      drill: parseFloat(m[4]),
-    });
-  }
-
-  // 5) Nets
-  const nets = {};
-  const netRe = /\(net\s+(\d+)\s+"([^"]*)"\)/g;
-  while ((m = netRe.exec(text)) !== null) {
-    nets[parseInt(m[1])] = m[2];
-  }
-
-  return {
-    boardW, boardH, boardLeft, boardTop,
-    fcuPads, bcuPads,
-    fcuTraces, bcuTraces,
-    vias, nets,
-  };
-}
-
-/**
- * Convert parsed KiCad PCB data to adapter editor format.
- * KiCad Y-down is flipped to editor Y-up.
- */
-function kicadPcbToAdapter(parsed) {
-  if (parsed.error) return null;
-  const { boardW, boardH, fcuPads, bcuPads, fcuTraces, bcuTraces, vias, nets } = parsed;
-
-  // Flip Y: editor uses Y-up, KiCad uses Y-down. newY = boardH - oldY
-  const flipY = (y) => roundTo(boardH - y, 4);
-
-  // Convert pads (F.Cu only for display, numbered by position)
-  const smdPads = fcuPads.map((p, i) => ({
-    pin: parseInt(p.pin) || (i + 1),
-    x: p.x, y: flipY(p.y),
-    w: p.w, h: p.h,
-    fp: p.fp, netPin: p.pin,
-  }));
-
-  // Convert F.Cu traces
-  const topTraces = fcuTraces.map(t => ({
-    segments: [{ x1: t.x1, y1: flipY(t.y1), x2: t.x2, y2: flipY(t.y2), w: t.w }],
-    layer: "F.Cu", net: t.net,
-  }));
-
-  // Convert B.Cu traces
-  const bottomTraces = bcuTraces.map(t => ({
-    segments: [{ x1: t.x1, y1: flipY(t.y1), x2: t.x2, y2: flipY(t.y2), w: t.w }],
-    layer: "B.Cu", net: t.net,
-  }));
-
-  // Convert vias
-  const editorVias = vias.map(v => ({
-    x: v.x, y: flipY(v.y), size: v.size, drill: v.drill,
-  }));
-
-  return {
-    smdPads,
-    topTraces,
-    bottomTraces,
-    vias: editorVias,
-    boardW, boardH,
-    nets,
-  };
-}
-
-
 function roundTo(val, dec = 4) { return Math.round(val * 10 ** dec) / 10 ** dec; }
 
 const ZOOM_LEVELS = [6, 8, 10, 14, 18, 24, 32, 40, 50];
@@ -294,9 +71,6 @@ function AdapterEditor() {
   const [importText, setImportText] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [maskExpansion, setMaskExpansion] = useState(0.05);
-  const [bottomTraces, setBottomTraces] = useState([]);
-  const [vias, setVias] = useState([]);
-  const [showLayer, setShowLayer] = useState("both"); // "F.Cu", "B.Cu", "both"
   const svgRef = useRef(null);
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
@@ -411,25 +185,9 @@ function AdapterEditor() {
     throughPins.forEach(tp => { c += `      { col: ${tp.col}, row: ${tp.row}, label: '${tp.label}' },\n`; });
     c += `    ],\n\n    features: {\n      copper: [\n        // SMD pads\n`;
     smdPads.forEach(p => { c += `        { type: 'pad', x: ${roundTo(p.x + ox, 4)}, y: ${roundTo(p.y + oy, 4)}, w: ${p.w}, h: ${p.h} },   // Pin ${p.pin}\n`; });
-    c += `\n        // F.Cu traces\n`;
+    c += `\n        // Fanout traces\n`;
     traces.forEach(t => { t.segments.forEach(s => { c += `        { type: 'trace', x1: ${roundTo(s.x1, 4)}, y1: ${roundTo(s.y1, 4)}, x2: ${roundTo(s.x2, 4)}, y2: ${roundTo(s.y2, 4)}, w: ${s.w} },\n`; }); });
-    c += `      ],\n`;
-
-    // B.Cu (copperBack)
-    if (bottomTraces.length > 0) {
-      c += `      copperBack: [\n`;
-      bottomTraces.forEach(t => { t.segments.forEach(s => { c += `        { type: 'trace', x1: ${roundTo(s.x1, 4)}, y1: ${roundTo(s.y1, 4)}, x2: ${roundTo(s.x2, 4)}, y2: ${roundTo(s.y2, 4)}, w: ${s.w} },\n`; }); });
-      c += `      ],\n`;
-    }
-
-    // Vias (drills)
-    if (vias.length > 0) {
-      c += `      drills: [\n`;
-      vias.forEach(v => { c += `        { x: ${roundTo(v.x, 4)}, y: ${roundTo(v.y, 4)}, drill: ${v.drill}, size: ${v.size} },\n`; });
-      c += `      ],\n`;
-    }
-
-    c += `      mask: [\n`;
+    c += `      ],\n      mask: [\n`;
     smdPads.forEach(p => { c += `        { type: 'pad', x: ${roundTo(p.x + ox, 4)}, y: ${roundTo(p.y + oy, 4)}, w: ${roundTo(p.w + maskExpansion * 2, 4)}, h: ${roundTo(p.h + maskExpansion * 2, 4)} },\n`; });
     c += `      ],\n      silk: [\n`;
     if (silkBody && silkBody.length > 2) {
@@ -445,7 +203,7 @@ function AdapterEditor() {
     c += `    outline: { width: ${roundTo((widthPins - 1) * GRID + 2, 1)}, height: ${roundTo((heightPins - 1) * GRID + 2, 1)} },\n`;
     c += `    outlineOffset: { x: 0, y: 0 },\n    widthPins: ${widthPins},\n    heightPins: ${heightPins},\n  },`;
     return c;
-  }, [adapter, maskExpansion, bottomTraces, vias]);
+  }, [adapter, maskExpansion]);
 
   const gridDots = [];
   for (let c = 0; c < adapter.widthPins; c++)
@@ -529,59 +287,15 @@ function AdapterEditor() {
         ),
 
         // Import
-        React.createElement("button", { onClick: () => setShowImport(!showImport), style: { ...btnStyle, padding: "6px 8px", fontSize: 11, border: `1px solid ${COLORS.panelBorder}` } }, "📁 Import KiCad / Gerber"),
+        React.createElement("button", { onClick: () => setShowImport(!showImport), style: { ...btnStyle, padding: "6px 8px", fontSize: 11, border: `1px solid ${COLORS.panelBorder}` } }, "📁 Import .kicad_mod"),
         showImport && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-          React.createElement("input", { type: "file", accept: ".kicad_mod,.kicad_pcb,.gbr,.gtl,.gbl", onChange: handleFileImport, style: { fontSize: 10, color: COLORS.textDim } }),
-          React.createElement("textarea", { value: importText, onChange: e => setImportText(e.target.value), placeholder: "...or paste file content", rows: 4, style: { ...inputStyle, fontSize: 10, resize: "vertical" } }),
-          React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
-            React.createElement("button", { onClick: doImport, style: { ...btnStyle, background: COLORS.accent, color: "#fff" } }, "KiCad Mod"),
-            React.createElement("button", { onClick: () => {
-              const parsed = parseGerber(importText);
-              if (parsed.pads.length === 0 && parsed.traces.length === 0) { alert("No features in Gerber"); return; }
-              let minX = Infinity, minY = Infinity;
-              for (const p of parsed.pads) { minX = Math.min(minX, p.x-p.w/2); minY = Math.min(minY, p.y-p.h/2); }
-              for (const t of parsed.traces) { minX = Math.min(minX, t.x1, t.x2); minY = Math.min(minY, t.y1, t.y2); }
-              const pads = parsed.pads.map((p,i) => ({ pin: i+1, x: roundTo(p.x-minX,4), y: roundTo(p.y-minY,4), w: p.w, h: p.h }));
-              const traces = parsed.traces.map(t => ({ segments: [{ x1: roundTo(t.x1-minX,4), y1: roundTo(t.y1-minY,4), x2: roundTo(t.x2-minX,4), y2: roundTo(t.y2-minY,4), w: t.w }] }));
-              setAdapter(a => ({ ...a, smdPads: pads, traces: [...a.traces, ...traces] }));
-              setShowImport(false);
-            }, style: { ...btnStyle, background: "#40a060", color: "#fff" } }, "Gerber"),
-            React.createElement("button", { onClick: () => {
-              const parsed = parseKicadPcb(importText);
-              if (parsed.error) { alert(parsed.error); return; }
-              const result = kicadPcbToAdapter(parsed);
-              if (!result) { alert("Parse failed"); return; }
-              // Auto-set grid size from board dimensions
-              const gridW = Math.round(result.boardW / GRID) + 1;
-              const gridH = Math.round(result.boardH / GRID) + 1;
-              setAdapter(a => ({
-                ...a,
-                widthPins: gridW, heightPins: gridH,
-                smdPads: result.smdPads,
-                traces: result.topTraces,
-              }));
-              setBottomTraces(result.bottomTraces);
-              setVias(result.vias);
-              setShowImport(false);
-            }, style: { ...btnStyle, background: "#4080d0", color: "#fff" } }, "KiCad PCB"),
-          ),
-          React.createElement("div", { style: { fontSize: 9, color: COLORS.textDim } },
-            "KiCad PCB: imports F.Cu + B.Cu traces, pads, vias from .kicad_pcb"
-          ),
+          React.createElement("input", { type: "file", accept: ".kicad_mod", onChange: handleFileImport, style: { fontSize: 10, color: COLORS.textDim } }),
+          React.createElement("textarea", { value: importText, onChange: e => setImportText(e.target.value), placeholder: "...or paste content", rows: 4, style: { ...inputStyle, fontSize: 10, resize: "vertical" } }),
+          React.createElement("button", { onClick: doImport, style: { ...btnStyle, background: COLORS.accent, color: "#fff" } }, "Import Pads"),
         ),
 
         // Export
         React.createElement("button", { onClick: () => setShowCode(!showCode), style: { ...btnStyle, background: COLORS.accent, color: "#fff", padding: "6px 8px", fontSize: 11 } }, showCode ? "Hide Code" : "📋 Export JS Code"),
-
-        // Layer toggle
-        (bottomTraces.length > 0 || vias.length > 0) && React.createElement("fieldset", { style: { border: `1px solid ${COLORS.panelBorder}`, padding: 8, borderRadius: 4 } },
-          React.createElement("legend", { style: { color: COLORS.textDim, fontSize: 10 } }, `LAYERS (B.Cu: ${bottomTraces.length} traces, ${vias.length} vias)`),
-          React.createElement("div", { style: { display: "flex", gap: 4 } },
-            ["both", "F.Cu", "B.Cu"].map(l =>
-              React.createElement("button", { key: l, onClick: () => setShowLayer(l), style: { ...btnStyle, background: showLayer === l ? (l === "B.Cu" ? "#2060c0" : l === "F.Cu" ? COLORS.accent : "#606") : COLORS.btnBg, fontSize: 10 } }, l)
-            ),
-          ),
-        ),
 
         // Mask expansion
         React.createElement("div", { style: { display: "flex", gap: 4, alignItems: "center" } },
@@ -608,7 +322,7 @@ function AdapterEditor() {
             `World: (${mousePos.world.x.toFixed(3)}, ${mousePos.world.y.toFixed(3)})`, React.createElement("br"),
             `Snap: (${mousePos.snapped.x.toFixed(3)}, ${mousePos.snapped.y.toFixed(3)})`, React.createElement("br"),
           ),
-          `Pads: ${adapter.smdPads.length} | F.Cu: ${adapter.traces.length} | B.Cu: ${bottomTraces.length} | Vias: ${vias.length} | TH: ${adapter.throughPins.length}`,
+          `Pads: ${adapter.smdPads.length} | Traces: ${adapter.traces.length} | TH: ${adapter.throughPins.length}`,
         ),
       ),
 
@@ -690,32 +404,13 @@ function AdapterEditor() {
             fill: "none", stroke: COLORS.silk, strokeWidth: 1, strokeDasharray: "3 2", opacity: 0.5,
           }),
 
-          // Traces (F.Cu - top)
-          (showLayer === "F.Cu" || showLayer === "both") && adapter.traces.map((t, ti) => React.createElement("g", { key: `t${ti}` },
+          // Traces
+          adapter.traces.map((t, ti) => React.createElement("g", { key: `t${ti}` },
             t.segments.map((s, si) => {
               const p1 = toScreen(s.x1, s.y1), p2 = toScreen(s.x2, s.y2);
               return React.createElement("line", { key: si, x1: p1.sx, y1: p1.sy, x2: p2.sx, y2: p2.sy, stroke: selectedTrace === ti ? COLORS.highlight : COLORS.trace, strokeWidth: Math.max(s.w * pxPerMm, 1.5), strokeLinecap: "round" });
             })
           )),
-
-          // Traces (B.Cu - bottom, shown in blue)
-          (showLayer === "B.Cu" || showLayer === "both") && bottomTraces.map((t, ti) => React.createElement("g", { key: `bt${ti}` },
-            t.segments.map((s, si) => {
-              const p1 = toScreen(s.x1, s.y1), p2 = toScreen(s.x2, s.y2);
-              return React.createElement("line", { key: si, x1: p1.sx, y1: p1.sy, x2: p2.sx, y2: p2.sy, stroke: "#4488ff", strokeWidth: Math.max(s.w * pxPerMm, 1.5), strokeLinecap: "round", opacity: showLayer === "both" ? 0.6 : 1 });
-            })
-          )),
-
-          // Vias (gold circles with drill hole)
-          vias.map((v, vi) => {
-            const s = toScreen(v.x, v.y);
-            const outerR = (v.size / 2) * pxPerMm;
-            const innerR = (v.drill / 2) * pxPerMm;
-            return React.createElement("g", { key: `v${vi}` },
-              React.createElement("circle", { cx: s.sx, cy: s.sy, r: outerR, fill: "#c8a020", stroke: "#e8c040", strokeWidth: 1 }),
-              React.createElement("circle", { cx: s.sx, cy: s.sy, r: innerR, fill: COLORS.bg, stroke: "#888", strokeWidth: 0.5 }),
-            );
-          }),
 
           // Active trace
           tool === "trace" && tracePoints.length > 0 && React.createElement("g", null,
