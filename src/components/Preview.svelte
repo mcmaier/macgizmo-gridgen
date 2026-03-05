@@ -4,11 +4,13 @@
   import { getRotatedAdapter } from '../lib/adapters.js';
   import { getTextStrokes } from '../lib/font.js';
   
-  let { config, modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = false } = $props();
+  let { config, modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable() } = $props();
 
   let fullConfig = $derived({
     ...config,
   });
+
+  let trackDrawMode = $derived(signalTrackDrawMode);
 
   // Resolve adapter definitions with rotation applied
   let resolvedAdapters = $derived(adapters.map(inst => ({
@@ -248,7 +250,7 @@
   }
 
   function onPreviewPointerDown(e) {
-    if (signalTrackDrawMode && e.button === 0 && !e.ctrlKey && !dragging) {
+    if (trackDrawMode && e.button === 0 && !e.ctrlKey && !dragging) {
       const snapped = snapToGridPoint(e);
       if (snapped) {
         e.preventDefault();
@@ -326,14 +328,14 @@
   let signalTrackHover = $state(null);
 
   $effect(() => {
-    if (!signalTrackDrawMode) {
+    if (!trackDrawMode) {
       signalTrackStart = null;
       signalTrackHover = null;
     }
   });
 
   function onPreviewPointerMove(e) {
-    if (!signalTrackDrawMode || !signalTrackStart) return;
+    if (!trackDrawMode || !signalTrackStart) return;
     const snapped = snapToGridPoint(e);
     signalTrackHover = snapped ? projectTrackEnd(signalTrackStart, snapped) : null;
   }
@@ -444,7 +446,7 @@
     />
   {/each}
 
-  {#if signalTrackDrawMode && signalTrackStart && signalTrackHover}
+  {#if trackDrawMode && signalTrackStart && signalTrackHover}
     {@const sx = grid.gridLeft + signalTrackStart.col * config.pitch}
     {@const sy = grid.gridBottom + signalTrackStart.row * config.pitch}
     {@const ex = grid.gridLeft + signalTrackHover.col * config.pitch}

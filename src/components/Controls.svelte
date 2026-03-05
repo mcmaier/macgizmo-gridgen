@@ -1,7 +1,7 @@
 <script>
   import { computeSignalGrid, computeMinSize, BOARD_MIN_WIDTH, BOARD_MAX_WIDTH, BOARD_MIN_HEIGHT, BOARD_MAX_HEIGHT, MOUNT_EDGE_MIN, MOUNT_EDGE_MAX } from '../lib/gerber.js';
 
-  let { config = $bindable(), onExport, onSaveProject, onLoadProject, resolvedAdapters = [], signalTrackDrawMode = false, onToggleSignalTrackDrawMode } = $props();
+  let { config = $bindable(), onExport, onSaveProject, onLoadProject, resolvedAdapters = [], signalTrackDrawMode = $bindable(), onToggleSignalTrackDrawMode = $bindable() } = $props();
 
   let minSize = $derived(computeMinSize(config.pitch, config.powerRails, config.mountingHoles));
   let effMinW = $derived(Math.max(BOARD_MIN_WIDTH, minSize.minWidth));
@@ -18,6 +18,9 @@
   let lastWidth = $state(config.width);
   let lastHeight = $state(config.height);
   let lastEdgeDist = $state(config.mountingHoles.edgeDistance);
+
+  let trackDrawMode = $derived(signalTrackDrawMode);
+  let trackDrawModeToggle = $derived(onToggleSignalTrackDrawMode);
 
   $effect(() => {
     if (config.width !== lastWidth) {
@@ -193,7 +196,7 @@
   </div>
 
   <div class="control-group">
-    <button class="rail-btn" class:active={signalTrackDrawMode} onclick={onToggleSignalTrackDrawMode}>
+    <button class="rail-btn" class:active={trackDrawMode} onclick={trackDrawModeToggle}>
       Draw Signal Tracks
     </button>
   </div>
