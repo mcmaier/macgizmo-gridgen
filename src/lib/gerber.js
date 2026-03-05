@@ -324,29 +324,8 @@ export function generatePowerRailTraces(config, placedAdapters = []) {
   // Build adapter obstacle data with TH pin positions for per-crossing margin
   const marginTH = pitch * 0.1;   // rail can reach TH pad
   const marginSMD = pitch * 0.6;  // must clear SMD features
-
-  const adapterObstacles = [];
-  for (const inst of placedAdapters) {
-    const adapter = inst._adapterDef;
-    if (!adapter) continue;
-    const ax = gridLeft + (inst.col || 0) * pitch;
-    const ay = gridBottom + (inst.row || 0) * pitch;
-    const thPins = adapter.throughPins || [];
-    
-    // Pre-compute absolute TH pin positions
-    const thPositions = thPins.map(p => ({
-      x: ax + p.col * pitch,
-      y: ay + p.row * pitch,
-    }));
-
-    adapterObstacles.push({
-      xMin: ax,
-      xMax: ax + (adapter.widthPins - 1) * pitch,
-      yMin: ay,
-      yMax: ay + (adapter.heightPins - 1) * pitch,
-      thPositions,
-    });
-  }
+  
+  const adapterObstacles = buildAdapterObstacles(placedAdapters, gridLeft, gridBottom, pitch);  
 
   const rawTraces = [];
 
@@ -399,12 +378,16 @@ export function generatePowerRailTraces(config, placedAdapters = []) {
   function rails(side) { return powerRails[side]; }
 }
 
-export function generateSignalTraces(config) {
+export function generateSignalTraces(config, placedAdapters = []) {
   const tracks = Array.isArray(config.signalTracks) ? config.signalTracks : [];
   if (tracks.length === 0) return [];
 
   const { pitch } = config;
   const { gridLeft, gridBottom, cols, rows } = computeGrid(config);
+  const holes = computeMountingHoles(config);
+  const marginTH = pitch * 0.1;
+  const marginSMD = pitch * 0.6;
+  const adapterObstacles = buildAdapterObstacles(placedAdapters, gridLeft, gridBottom, pitch);
   const result = [];
 
   for (const track of tracks) {
@@ -416,16 +399,45 @@ export function generateSignalTraces(config) {
     if (startCol !== endCol && startRow !== endRow) continue;
     if (startCol === endCol && startRow === endRow) continue;
 
-    result.push({
+    const rawTrace = {
       x1: round4(gridLeft + startCol * pitch),
       y1: round4(gridBottom + startRow * pitch),
       x2: round4(gridLeft + endCol * pitch),
       y2: round4(gridBottom + endRow * pitch),
       type: 'signal',
-    });
+    };
+
+    const segments = clipTraceAroundObstacles(rawTrace, holes, adapterObstacles, marginTH, marginSMD);
+    result.push(...segments);
   }
 
   return result;
+}
+
+function buildAdapterObstacles(placedAdapters, gridLeft, gridBottom, pitch) {
+  const adapterObstacles = [];
+
+  for (const inst of placedAdapters) {
+    const adapter = inst._adapterDef;
+    if (!adapter) continue;
+
+    const ax = gridLeft + (inst.col || 0) * pitch;
+    const ay = gridBottom + (inst.row || 0) * pitch;
+    const thPins = adapter.throughPins || [];
+
+    adapterObstacles.push({
+      xMin: ax,
+      xMax: ax + (adapter.widthPins - 1) * pitch,
+      yMin: ay,
+      yMax: ay + (adapter.heightPins - 1) * pitch,
+      thPositions: thPins.map(p => ({
+        x: ax + p.col * pitch,
+        y: ay + p.row * pitch,
+      })),
+    });
+  }
+
+  return adapterObstacles;
 }
 
 /**
@@ -606,7 +618,7 @@ export function generateEdgeCuts(config) {
 export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters = []) {
   const pads = generatePadPositions(config, placedAdapters);
   const traces = generatePowerRailTraces(config, placedAdapters);
-  const signalTraces = generateSignalTraces(config);
+  const signalTraces = generateSignalTraces(config, placedAdapters);
   const holes = computeMountingHoles(config);
   const { padDiameter, annularRing, pitch } = config;
   const { gridLeft, gridBottom } = computeGrid(config);

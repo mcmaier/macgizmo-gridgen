@@ -38,6 +38,7 @@
   let adapters = $state([]);
   let selectedInstanceId = $state(null);
   let signalTrackDrawMode = $state(false);
+  let lastPitch = $state(defaultConfig.pitch);
 
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
@@ -82,6 +83,7 @@
       const imported = parseProject(text, defaultConfig);
 
       config = imported.config;
+      lastPitch = imported.config.pitch;
       modules = imported.modules;
       adapters = imported.adapters;
       selectedInstanceId = null;
@@ -118,6 +120,18 @@
     };
     signalTrackDrawMode = false;
   }
+  
+  $effect(() => {
+    if (config.pitch === lastPitch) return;
+
+    config = {
+      ...config,
+      signalTracks: [],
+    };
+    signalTrackDrawMode = false;
+    lastPitch = config.pitch;
+  });
+
 </script>
 
 <div use:fullscreen={{toggle: toggleFullscreen}} class="ppp-app" id="main-app">
@@ -144,7 +158,7 @@
     </aside>
     <main class="ppp-main">
       <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} />
-      <Preview bind:config bind:modules bind:adapters {selectedInstanceId} {onSelect} signalTrackDrawMode={signalTrackDrawMode} />
+      <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} />
     </main>
   </div>
 

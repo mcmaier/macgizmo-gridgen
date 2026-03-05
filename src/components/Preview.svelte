@@ -20,7 +20,7 @@
 
   let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
   let traces = $derived(generatePowerRailTraces(fullConfig, resolvedAdapters));
-  let signalTraces = $derived(generateSignalTraces(fullConfig));
+  let signalTraces = $derived(generateSignalTraces(fullConfig, resolvedAdapters));
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
   let grid = $derived(computeGrid(fullConfig));
@@ -165,6 +165,10 @@
   }
 
   function onItemPointerDown(e, inst, kind) {
+    if (trackDrawMode) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
     onSelect(inst.id);
@@ -395,6 +399,21 @@
       touchState = null;
     }
   }
+
+  
+  function onWindowKeyDown(e) {
+    if (e.key !== 'Escape' || !trackDrawMode) return;
+    signalTrackStart = null;
+    signalTrackHover = null;
+    signalTrackDrawMode = false;
+  }
+
+  $effect(() => {
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onWindowKeyDown);
+    };
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
