@@ -604,6 +604,16 @@
           {/if}
         {/each}
 
+        <!-- Silk reference texts  -->
+        {#each a.def.features.silkText as st}
+          {@const labelStrokes = getTextStrokes(st.text, a.x + st.x, a.y + st.y, st.height || 1.0, st.anchor || 'center', st.rotation || 0)}
+          {#each labelStrokes as polyline}
+            <path d={polyToPath(polyline)}
+              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+              stroke-linejoin="round" fill="none" opacity="0.7" />
+          {/each}
+        {/each}
+        
         <!-- Silk label -->
         {#if a.def.silkLabel}
           {@const sl = a.def.silkLabel}
