@@ -95,6 +95,7 @@
     padHole: '#1a1a1a',
     vcc: '#cc3333',
     gnd: '#3333cc',
+    signal: '#c8a84e',
     mountRing: '#888888',
     mountHole: '#1a1a1a',
     keepout: '#0d3d0d',
@@ -375,7 +376,8 @@
     <line
       x1={t.x1} y1={t.y1}
       x2={t.x2} y2={t.y2}
-      stroke={t.type === 'vcc' ? colors.vcc : colors.gnd}
+      //stroke={t.type === 'vcc' ? colors.vcc : colors.gnd}
+      stroke={colors[t.type] || colors.signal}
       stroke-width={RAIL_TRACE_WIDTH}
       stroke-linecap="round"
       opacity="0.6"
