@@ -1,5 +1,6 @@
 const PROJECT_FILE_TYPE = 'macgizmo.gridgen.project';
 const CURRENT_SCHEMA_VERSION = 1;
+const SOFTWARE_VERSION = __APP_VERSION__;
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -72,6 +73,7 @@ export function buildProjectData({ config, modules, adapters }) {
   return {
     type: PROJECT_FILE_TYPE,
     schemaVersion: CURRENT_SCHEMA_VERSION,
+    toolVersion: SOFTWARE_VERSION,  
     savedAt: new Date().toISOString(),
     data: {
       config,

@@ -4,7 +4,7 @@
   import { getRotatedAdapter } from '../lib/adapters.js';
   import { getTextStrokes } from '../lib/font.js';
   
-  let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable() } = $props();
+  let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable(), selectedSignalTrackIndex = null, onSelectSignalTrack } = $props();
 
   let fullConfig = $derived({
     ...config,
@@ -21,6 +21,7 @@
   let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
   let traces = $derived(generatePowerRailTraces(fullConfig, resolvedAdapters));
   let signalTraces = $derived(generateSignalTraces(fullConfig, resolvedAdapters));
+  let customSignalTracks = $derived(Array.isArray(config.signalTracks) ? config.signalTracks : []);;
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
   let grid = $derived(computeGrid(fullConfig));
@@ -172,6 +173,7 @@
     e.preventDefault();
     e.stopPropagation();
     onSelect(inst.id);
+    selectedSignalTrackIndex = null;
     const pt = getSvgPoint(e);
     dragging = {
       instanceId: inst.id,
@@ -245,6 +247,40 @@
     return { col, row };
   }
 
+  function findSignalTrackNearPoint(point) {
+    const tracks = Array.isArray(config.signalTracks) ? config.signalTracks : [];
+    if (tracks.length === 0) return null;
+
+    const tolerance = Math.max(0.6, config.pitch * 0.35);
+
+    for (let i = tracks.length - 1; i >= 0; i--) {
+      const track = tracks[i];
+      const sx = grid.gridLeft + track.startCol * config.pitch;
+      const sy = grid.gridBottom + track.startRow * config.pitch;
+      const ex = grid.gridLeft + track.endCol * config.pitch;
+      const ey = grid.gridBottom + track.endRow * config.pitch;
+
+      let distance;
+      if (Math.abs(sy - ey) < 0.001) {
+        const minX = Math.min(sx, ex) - tolerance;
+        const maxX = Math.max(sx, ex) + tolerance;
+        if (point.x < minX || point.x > maxX) continue;
+        distance = Math.abs(point.y - sy);
+      } else if (Math.abs(sx - ex) < 0.001) {
+        const minY = Math.min(sy, ey) - tolerance;
+        const maxY = Math.max(sy, ey) + tolerance;
+        if (point.y < minY || point.y > maxY) continue;
+        distance = Math.abs(point.x - sx);
+      } else {
+        continue;
+      }
+
+      if (distance <= tolerance) return i;
+    }
+
+    return null;
+  }
+
   function projectTrackEnd(start, point) {
     const dc = Math.abs(point.col - start.col);
     const dr = Math.abs(point.row - start.row);
@@ -267,7 +303,7 @@
         } else {
           const end = projectTrackEnd(signalTrackStart, snapped);
           if (end.col !== signalTrackStart.col || end.row !== signalTrackStart.row) {
-            config.signalTracks = [
+             const nextTracks = [
               ...(config.signalTracks || []),
               {
                 startCol: signalTrackStart.col,
@@ -276,11 +312,25 @@
                 endRow: end.row,
               },
             ];
+            config.signalTracks = nextTracks;
+            selectedSignalTrackIndex = nextTracks.length - 1;
           }
           signalTrackStart = null;
           signalTrackHover = null;
+          onSelect(null);
           signalTrackDrawMode = false;
         }
+        return;
+      }
+    }
+
+    if (e.button === 0 && !e.ctrlKey) {
+      const snappedTrackIndex = findSignalTrackNearPoint(getSvgPoint(e));
+      if (snappedTrackIndex !== null) {
+        e.preventDefault();
+        selectedSignalTrackIndex = snappedTrackIndex;
+        onSelect(null);
+        selectedSignalTrackIndex = null;
         return;
       }
     }
@@ -298,8 +348,17 @@
       const isBackground = e.target === svgEl || e.target.closest('.module-overlay, .adapter-overlay') === null;
       if (isBackground) {
         onSelect(null);
+        onSelectSignalTrack?.(null);
       }
     }
+  }
+
+  function onSignalTrackPointerDown(e, trackIndex) {
+    if (trackDrawMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect(null);
+    onSelectSignalTrack?.(trackIndex);
   }
 
   function onPanMove(e) {
@@ -321,7 +380,7 @@
     window.removeEventListener('pointerup', onPanUp);
   }
 
-    function resetView() {
+  function resetView() {
     zoomLevel = 1;
     panX = 0;    
     panY = 0;
@@ -336,6 +395,14 @@
     if (!trackDrawMode) {
       signalTrackStart = null;
       signalTrackHover = null;
+    }
+  });
+
+  $effect(() => {
+    const tracks = config.signalTracks || [];
+    if (selectedSignalTrackIndex === null) return;
+    if (selectedSignalTrackIndex < 0 || selectedSignalTrackIndex >= tracks.length) {
+      selectedSignalTrackIndex = null;
     }
   });
 
@@ -463,6 +530,23 @@
       stroke-width={RAIL_TRACE_WIDTH}
       stroke-linecap="round"
       opacity="0.85"
+    />
+  {/each}
+
+  {#each customSignalTracks as track, index}
+    {@const x1 = grid.gridLeft + track.startCol * config.pitch}
+    {@const y1 = grid.gridBottom + track.startRow * config.pitch}
+    {@const x2 = grid.gridLeft + track.endCol * config.pitch}
+    {@const y2 = grid.gridBottom + track.endRow * config.pitch}
+    <line
+      x1={x1} y1={y1}
+      x2={x2} y2={y2}
+      stroke={selectedSignalTrackIndex === index ? '#f9e2af' : 'transparent'}
+      stroke-width={selectedSignalTrackIndex === index ? RAIL_TRACE_WIDTH + 0.5 : RAIL_TRACE_WIDTH + 0.3}
+      stroke-linecap="round"
+      opacity={selectedSignalTrackIndex === index ? '0.95' : '0.75'}
+      onpointerdown={(e) => onSignalTrackPointerDown(e, index)}
+      style="cursor: pointer;"
     />
   {/each}
 

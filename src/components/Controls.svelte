@@ -1,7 +1,9 @@
 <script>
   import { computeSignalGrid, computeMinSize, BOARD_MIN_WIDTH, BOARD_MAX_WIDTH, BOARD_MIN_HEIGHT, BOARD_MAX_HEIGHT, MOUNT_EDGE_MIN, MOUNT_EDGE_MAX } from '../lib/gerber.js';
 
-  let { config = $bindable(), onExport, onSaveProject, onLoadProject, resolvedAdapters = [], signalTrackDrawMode = $bindable(), onToggleSignalTrackDrawMode = $bindable(), onDeleteCustomTracks } = $props();
+  //let { config = $bindable(), onExport, onSaveProject, onLoadProject, resolvedAdapters = [], signalTrackDrawMode = $bindable(), onToggleSignalTrackDrawMode = $bindable(), onDeleteCustomTracks } = $props();
+
+    let { config = $bindable(), onExport, onSaveProject, onLoadProject, resolvedAdapters = [], signalTrackDrawMode = $bindable(), onToggleSignalTrackDrawMode = $bindable(), onDeleteCustomTracks, onDeleteAllCustomTracks, selectedSignalTrackIndex = null } = $props();
 
   let minSize = $derived(computeMinSize(config.pitch, config.powerRails, config.mountingHoles));
   let effMinW = $derived(Math.max(BOARD_MIN_WIDTH, minSize.minWidth));
@@ -22,6 +24,7 @@
   let trackDrawMode = $derived(signalTrackDrawMode);
   let trackDrawModeToggle = $derived(onToggleSignalTrackDrawMode);
   let customTrackCount = $derived((config.signalTracks || []).length);
+  let hasSelectedTrack = $derived(selectedSignalTrackIndex !== null);
 
   $effect(() => {
     if (config.width !== lastWidth) {
@@ -201,7 +204,10 @@
       <button class="rail-btn" class:active={trackDrawMode} onclick={trackDrawModeToggle}>
         Draw Signal Track
       </button>
-      <button class="rail-btn track-delete-btn" onclick={onDeleteCustomTracks} disabled={customTrackCount === 0}>
+      <button class="rail-btn track-delete-btn" onclick={onDeleteCustomTracks} disabled={selectedSignalTrackIndex === null}>
+        Delete Selected Track
+      </button>
+      <button class="rail-btn track-delete-btn" onclick={onDeleteAllCustomTracks} disabled={customTrackCount === 0}>
         Delete Tracks ({customTrackCount})
       </button>
     </div>

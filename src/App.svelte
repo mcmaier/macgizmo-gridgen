@@ -36,8 +36,9 @@
   let config = $state(structuredClone(defaultConfig));
   let modules = $state([]);
   let adapters = $state([]);
-  let selectedInstanceId = $state(null);
+  let selectedInstanceId = $state(null);  
   let signalTrackDrawMode = $state(false);
+  let selectedSignalTrackIndex = $state(null);
   let lastPitch = $state(defaultConfig.pitch);
 
   let resolvedAdapters = $derived(adapters.map(inst => ({
@@ -47,6 +48,7 @@
 
   function onSelect(id) {
     selectedInstanceId = id;
+    if (id !== null) selectedSignalTrackIndex = null;
   }
 
   async function handleExport() {
@@ -87,6 +89,7 @@
       modules = imported.modules;
       adapters = imported.adapters;
       selectedInstanceId = null;
+      selectedSignalTrackIndex = null;
       signalTrackDrawMode = false;
 
       if (imported.isFutureVersion) {
@@ -114,10 +117,46 @@
   }
 
   function clearCustomSignalTracks() {
+    if (selectedSignalTrackIndex === null) return;
+
+    config = {
+      ...config,
+      signalTracks: (config.signalTracks || []).filter((_, index) => index !== selectedSignalTrackIndex),
+    };
+    selectedSignalTrackIndex = null;
+    signalTrackDrawMode = false;
+  }
+
+  function selectSignalTrack(index) {
+    selectedSignalTrackIndex = index;
+    selectedInstanceId = null;
+  }
+
+  $effect(() => {
+    const count = (config.signalTracks || []).length;
+    if (selectedSignalTrackIndex !== null && selectedSignalTrackIndex >= count) {
+      selectedSignalTrackIndex = null;
+    }
+  });
+
+  $effect(() => {
+    if (selectedInstanceId !== null) {
+      selectedSignalTrackIndex = null;
+    }
+  });
+
+  $effect(() => {
+    if (signalTrackDrawMode) {
+      selectedSignalTrackIndex = null;
+    }
+  });
+
+  function clearAllCustomSignalTracks() {
     config = {
       ...config,
       signalTracks: [],
     };
+    selectedSignalTrackIndex = null;
     signalTrackDrawMode = false;
   }
   
@@ -129,6 +168,7 @@
       signalTracks: [],
     };
     signalTrackDrawMode = false;
+    selectedSignalTrackIndex = null;
     lastPitch = config.pitch;
   });
 
@@ -154,11 +194,11 @@
 
   <div class="ppp-layout">
     <aside class="ppp-sidebar">
-      <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} />
+            <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
     </aside>
     <main class="ppp-main">
       <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} />
-      <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} />
+      <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} {selectedSignalTrackIndex} onSelectSignalTrack={selectSignalTrack} />
     </main>
   </div>
 
