@@ -733,116 +733,7 @@
       stroke-linejoin="round"
       fill="none"
     />
-     {/each}
-  
-  
-  <!-- Module overlays -->
-  {#each modules as inst (inst.id)}
-    {@const m = moduleToMm(inst)}
-    {@const isSelected = selectedInstanceId === inst.id}
-    {#if m}
-      {@const outW = m.rm.outline.width}
-      {@const outH = m.rm.outline.height}
-      {@const pinW = (m.rm.widthPins - 1) * m.pitch}
-      {@const pinH = (m.rm.heightPins - 1) * m.pitch}
-      {@const oOfs = m.rm.outlineOffset || { x: 0, y: 0 }}
-      {@const ofsX = (outW - pinW) / 2 - oOfs.x}
-      {@const ofsY = (outH - pinH) / 2 - oOfs.y}
-      {@const outCx = m.x - ofsX + outW / 2}
-      {@const outCy = m.y - ofsY + outH / 2}
-      {@const modDef = MODULE_LIBRARY.find(md => md.id === inst.moduleId)}
-      {@const moduleOverlayUrl = getModuleOverlayUrl(modDef)}
-
-
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <g
-        class="module-overlay"
-        class:dragging={dragging?.instanceId === inst.id}
-        onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
-        style="cursor: grab;"
-      >
-        <!-- Selection highlight -->
-        {#if isSelected}
-          <rect
-            x={m.x - ofsX - 0.8}
-            y={m.y - ofsY - 0.8}
-            width={outW + 1.6}
-            height={outH + 1.6}
-            fill="none"
-            stroke="#89b4fa"
-            stroke-width="0.35"
-            stroke-dasharray="0.8 0.4"
-            rx="0.6"
-            opacity="0.9"
-          />
-        {/if}
-
-        <!-- Module body outline -->
-        <rect
-          x={m.x - ofsX}
-          y={m.y - ofsY}
-          width={outW}
-          height={outH}
-          fill={inst.color}
-          fill-opacity="0.2"
-          stroke={inst.color}
-          stroke-width="0.3"
-          stroke-dasharray="1 0.5"
-          rx="0.5"
-        />
-
-        <!-- Module PNG overlay (pinout diagram) -->
-        {#if showModuleOverlays && moduleOverlayUrl}
-          {@const imgX = m.x - ofsX}
-          {@const imgY = m.y - ofsY}
-          {@const rot = (inst.rotation || 0) % 4}
-          {@const cx = imgX + outW / 2}
-          {@const cy = imgY + outH / 2}
-          {@const origW = modDef.outline.width}
-          {@const origH = modDef.outline.height}
-          <g transform="translate({cx},{cy}) scale(1,-1) rotate({rot * 90})">
-            <image
-              href={moduleOverlayUrl}
-              x={-origW / 2}
-              y={-origH / 2}
-              width={origW}
-              height={origH}
-              preserveAspectRatio="xMidYMid meet"
-              opacity="0.85"
-            />
-          </g>
-        {/if}
-
-        <!-- Pin markers -->
-        {#each m.rm.pins as pin}
-          <circle
-            cx={m.x + pin.col * m.pitch}
-            cy={m.y + pin.row * m.pitch}
-            r={m.pitch * 0.25}
-            fill={inst.color}
-            fill-opacity="0.5"
-            stroke={inst.color}
-            stroke-width="0.15"
-          />
-        {/each}
-
-        <!-- Module label centered on outline (flipped back for readability) -->
-        <g transform="translate({outCx},{outCy}) scale(1,-1)">
-          <text
-            x="0"
-            y="0"
-            text-anchor="middle"
-            dominant-baseline="central"
-            fill={inst.color}
-            fill-opacity="0.8"
-            font-size="{Math.min(2.5, outW * 0.1)}"
-            font-family="'Segoe UI', system-ui, sans-serif"
-            font-weight="600"
-          >{m.rm.name}</text>
-        </g>
-      </g>
-    {/if}
-  {/each}
+     {/each}      
 
   <!-- Adapter overlays (real Gerber features) -->
   {#each adapters as inst (inst.id)}
@@ -1013,6 +904,115 @@
       </g>
     {/if}
   {/each}    
+
+<!-- Module overlays -->
+  {#each modules as inst (inst.id)}
+    {@const m = moduleToMm(inst)}
+    {@const isSelected = selectedInstanceId === inst.id}
+    {#if m}
+      {@const outW = m.rm.outline.width}
+      {@const outH = m.rm.outline.height}
+      {@const pinW = (m.rm.widthPins - 1) * m.pitch}
+      {@const pinH = (m.rm.heightPins - 1) * m.pitch}
+      {@const oOfs = m.rm.outlineOffset || { x: 0, y: 0 }}
+      {@const ofsX = (outW - pinW) / 2 - oOfs.x}
+      {@const ofsY = (outH - pinH) / 2 - oOfs.y}
+      {@const outCx = m.x - ofsX + outW / 2}
+      {@const outCy = m.y - ofsY + outH / 2}
+      {@const modDef = MODULE_LIBRARY.find(md => md.id === inst.moduleId)}
+      {@const moduleOverlayUrl = getModuleOverlayUrl(modDef)}
+
+
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <g
+        class="module-overlay"
+        class:dragging={dragging?.instanceId === inst.id}
+        onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
+        style="cursor: grab;"
+      >
+        <!-- Selection highlight -->
+        {#if isSelected}
+          <rect
+            x={m.x - ofsX - 0.8}
+            y={m.y - ofsY - 0.8}
+            width={outW + 1.6}
+            height={outH + 1.6}
+            fill="none"
+            stroke="#89b4fa"
+            stroke-width="0.35"
+            stroke-dasharray="0.8 0.4"
+            rx="0.6"
+            opacity="0.9"
+          />
+        {/if}
+
+        <!-- Module body outline -->
+        <rect
+          x={m.x - ofsX}
+          y={m.y - ofsY}
+          width={outW}
+          height={outH}
+          fill={inst.color}
+          fill-opacity="0.2"
+          stroke={inst.color}
+          stroke-width="0.3"
+          stroke-dasharray="1 0.5"
+          rx="0.5"
+        />
+
+        <!-- Module PNG overlay (pinout diagram) -->
+        {#if showModuleOverlays && moduleOverlayUrl}
+          {@const imgX = m.x - ofsX}
+          {@const imgY = m.y - ofsY}
+          {@const rot = (inst.rotation || 0) % 4}
+          {@const cx = imgX + outW / 2}
+          {@const cy = imgY + outH / 2}
+          {@const origW = modDef.outline.width}
+          {@const origH = modDef.outline.height}
+          <g transform="translate({cx},{cy}) scale(1,-1) rotate({rot * 90})">
+            <image
+              href={moduleOverlayUrl}
+              x={-origW / 2}
+              y={-origH / 2}
+              width={origW}
+              height={origH}
+              preserveAspectRatio="xMidYMid meet"
+              opacity="0.85"
+            />
+          </g>
+        {/if}
+
+        <!-- Pin markers -->
+        {#each m.rm.pins as pin}
+          <circle
+            cx={m.x + pin.col * m.pitch}
+            cy={m.y + pin.row * m.pitch}
+            r={m.pitch * 0.25}
+            fill={inst.color}
+            fill-opacity="0.5"
+            stroke={inst.color}
+            stroke-width="0.15"
+          />
+        {/each}
+
+        <!-- Module label centered on outline (flipped back for readability) -->
+        <g transform="translate({outCx},{outCy}) scale(1,-1)">
+          <text
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="central"
+            fill={inst.color}
+            fill-opacity="0.8"
+            font-size="{Math.min(2.5, outW * 0.1)}"
+            font-family="'Segoe UI', system-ui, sans-serif"
+            font-weight="600"
+          >{m.rm.name}</text>
+        </g>
+      </g>
+    {/if}
+  {/each}
+
   </g>
 </svg>
 
