@@ -36,7 +36,8 @@
   let adapters = $state([]);
   let selectedInstanceId = $state(null);  
   let signalTrackDrawMode = $state(false);
-  let showOverlays = $state(true);
+  let showAdapterOverlays = $state(true);
+  let showModuleOverlays = $state(true);
   let selectedSignalTrackIndex = $state(null);
   let lastPitch = $state(defaultConfig.pitch);
 
@@ -220,8 +221,8 @@
       <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
     </aside>
     <main class="ppp-main">
-      <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} bind:showOverlays />
-      <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} {selectedSignalTrackIndex} onSelectSignalTrack={selectSignalTrack} {showOverlays} />
+      <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} bind:showAdapterOverlays bind:showModuleOverlays />
+      <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} {selectedSignalTrackIndex} onSelectSignalTrack={selectSignalTrack} {showAdapterOverlays} {showModuleOverlays} />
     </main>
   </div>  
 

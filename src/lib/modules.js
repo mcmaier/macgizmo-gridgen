@@ -13,7 +13,7 @@
  *   - outlineOffset: { x, y } optional mm offset of outline vs pin center
  *       Positive y = body extends above pins, positive x = body extends right
  *   - overlay: optional boolean or string. If true, loads PNG from
- *       {overlayBasePath}/{id}.png. If string, uses that as filename.
+ *       {moduleOverlayBasePath}/{id}.png. If string, uses that as filename.
  *       PNG should show the module's pinout/appearance on transparent background.
  *
  * Pin row format: { x, y, count, dx, dy }
@@ -22,7 +22,7 @@
  */
 
 /** Base path for module overlay PNGs. Override for WordPress deployment. */
-export let overlayBasePath = './assets/modules';
+export let moduleOverlayBasePath = './assets/modules';
 
 export const MODULE_LIBRARY = [
   {
@@ -254,15 +254,15 @@ export function getModulePins(moduleId) {
 export function getModuleOverlayUrl(mod) {
   if (!mod || !mod.overlay) return null;
   const filename = typeof mod.overlay === 'string' ? mod.overlay : `${mod.id}.png`;
-  return `${overlayBasePath}/${filename}`;
+  return `${moduleOverlayBasePath}/${filename}`;
 }
 
 /**
  * Set the base path for module overlay PNGs (e.g. for WordPress deployment).
  * @param {string} path - Base path without trailing slash
  */
-export function setOverlayBasePath(path) {
-  overlayBasePath = path;
+export function setModuleOverlayBasePath(path) {
+  moduleOverlayBasePath = path;
 }
 
 /**

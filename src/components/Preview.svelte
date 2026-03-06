@@ -1,10 +1,10 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, generateSignalTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN, isInKeepout } from '../lib/gerber.js';
   import { getRotatedModule, getModuleOverlayUrl, MODULE_LIBRARY } from '../lib/modules.js';
-  import { getRotatedAdapter } from '../lib/adapters.js';
+  import { getRotatedAdapter, getAdapterOverlayUrl, ADAPTER_LIBRARY } from '../lib/adapters.js';
   import { getTextStrokes } from '../lib/font.js';
   
-  let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable(), selectedSignalTrackIndex = null, onSelectSignalTrack, showOverlays = true } = $props();
+  let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable(), selectedSignalTrackIndex = null, onSelectSignalTrack, showAdapterOverlays = true , showModuleOverlays = true } = $props();
 
   let fullConfig = $derived({
     ...config,
@@ -751,7 +751,8 @@
       {@const outCx = m.x - ofsX + outW / 2}
       {@const outCy = m.y - ofsY + outH / 2}
       {@const modDef = MODULE_LIBRARY.find(md => md.id === inst.moduleId)}
-      {@const overlayUrl = getModuleOverlayUrl(modDef)}
+      {@const moduleOverlayUrl = getModuleOverlayUrl(modDef)}
+
 
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g
@@ -791,8 +792,7 @@
         />
 
         <!-- Module PNG overlay (pinout diagram) -->
-
-        {#if showOverlays && overlayUrl}
+        {#if showModuleOverlays && moduleOverlayUrl}
           {@const imgX = m.x - ofsX}
           {@const imgY = m.y - ofsY}
           {@const rot = (inst.rotation || 0) % 4}
@@ -802,7 +802,7 @@
           {@const origH = modDef.outline.height}
           <g transform="translate({cx},{cy}) scale(1,-1) rotate({rot * 90})">
             <image
-              href={overlayUrl}
+              href={moduleOverlayUrl}
               x={-origW / 2}
               y={-origH / 2}
               width={origW}
@@ -849,6 +849,11 @@
     {@const a = adapterToMm(inst)}
     {@const hasConflict = adapterConflicts.has(inst.id)}
     {@const isSelected = selectedInstanceId === inst.id}
+    {@const adpDef = ADAPTER_LIBRARY.find(ad => ad.id === inst.adapterId)}
+    {@const adapterOverlayUrl = getAdapterOverlayUrl(adpDef)}
+    {@const outW = a.ra.outline.width}
+    {@const outH = a.ra.outline.height}
+
     {#if a}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g class="module-overlay adapter-overlay"
@@ -969,6 +974,29 @@
             stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
             fill="none" opacity="0.7" />
         {/each}
+
+        
+        <!-- Adapter PNG overlay -->
+        {#if showAdapterOverlays && adapterOverlayUrl}
+          {@const imgX = a.x}
+          {@const imgY = a.y}
+          {@const rot = (inst.rotation || 0) % 4}
+          {@const cx = imgX + outW / 2}
+          {@const cy = imgY + outH / 2}
+          {@const origW = adpDef.outline.width}
+          {@const origH = adpDef.outline.height}
+          <g transform="translate({cx},{cy}) scale(1,-1) rotate({rot * 90})">
+            <image
+              href={adapterOverlayUrl}
+              x={-origW / 2}
+              y={-origH / 2}
+              width={origW}
+              height={origH}
+              preserveAspectRatio="xMidYMid meet"
+              opacity="0.85"
+            />
+          </g>
+        {/if}
 
         <g transform="translate({a.x + (a.def.widthPins - 1) * a.pitch / 2},{a.y + (a.def.heightPins - 1) * a.pitch / 2 + a.def.outline.height * 0.4}) scale(1,-1)">
           <text x="0" y="0" text-anchor="middle" dominant-baseline="central"

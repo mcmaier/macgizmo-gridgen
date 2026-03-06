@@ -28,6 +28,9 @@
  *
  */
 
+/** Base path for module overlay PNGs. Override for WordPress deployment. */
+export let adapterOverlayBasePath = './assets/adapters';
+
 export const ADAPTER_LIBRARY = [
     {
       id: 'rail-bridge',
@@ -59,7 +62,7 @@ export const ADAPTER_LIBRARY = [
       outline: { width: 7.1, height: 2 },
       outlineOffset: { x: 0, y: 0 },
       widthPins: 3,
-      heightPins: 1,
+      heightPins: 1,      
     },
 
     {
@@ -623,6 +626,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 5,
     heightPins: 3,
     silkLabel: { text: 'SOT223', rotation: 90, x: 5.08, y: 2.54, height: 0.8 },
+    overlay: true,
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1842,4 +1846,24 @@ export function getAdapterFeatures(adapter, inst, gridLeft, gridBottom, pitch) {
     silk: adapter.features.silk.map(offsetFeature),
     silkText: adapter.features.silkText.map(offsetFeature),
   };
+}
+
+
+ /**
+ * Get overlay image URL for a module, or null if none configured.
+ * @param {object} adp - Module definition from ADAPTER_LIBRARY
+ * @returns {string|null} URL to PNG overlay
+ */
+export function getAdapterOverlayUrl(adp) {
+  if (!adp || !adp.overlay) return null;
+  const filename = typeof adp.overlay === 'string' ? adp.overlay : `${adp.id}.png`;
+  return `${adapterOverlayBasePath}/${filename}`;
+}
+
+/**
+ * Set the base path for module overlay PNGs (e.g. for WordPress deployment).
+ * @param {string} path - Base path without trailing slash
+ */
+export function setAdapterOverlayBasePath(path) {
+  adapterOverlayBasePath = path;
 }
