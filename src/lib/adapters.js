@@ -1586,23 +1586,24 @@ export function getRotatedAdapter(adapterId, rotation = 0) {
     } else if (f.type === 'text') {
       const p = rotPt(f.x, f.y);
       const baseRot = f.rotation || 0;
-      // Each 90° adapter rotation toggles the label orientation
-      const labelRot = (r % 2 === 0) ? baseRot : (baseRot === 90 ? 0 : 90);
-      return { type:'text', text: f.text, x: p.x, y: p.y, rotation: labelRot };
+      // Add adapter rotation (r × 90°), then normalize for readability:
+      // Text at 180° or 270° is upside-down/mirrored, flip to 0° or 90°
+      let textRot = (baseRot + r * 90) % 360;
+      if (textRot >= 180) textRot -= 180;
+      return { ...f, x: p.x, y: p.y, rotation: textRot };
     }
 
     return f;
   }
 
   // Rotate silkLabel position if present
-  // Label text rotation toggles between base and base+90° on each adapter rotation step
   let silkLabel = adapter.silkLabel;
   if (silkLabel) {
     const p = rotPt(silkLabel.x, silkLabel.y);
     const baseRot = silkLabel.rotation || 0;
-    // Each 90° adapter rotation toggles the label orientation
-    const labelRot = (r % 2 === 0) ? baseRot : (baseRot === 90 ? 0 : 90);
-    silkLabel = { ...silkLabel, x: p.x, y: p.y, rotation: labelRot };
+    let textRot = (baseRot + r * 90) % 360;
+    if (textRot >= 180) textRot -= 180;
+    silkLabel = { ...silkLabel, x: p.x, y: p.y, rotation: textRot };
   }
 
   return {

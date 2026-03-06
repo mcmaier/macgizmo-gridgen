@@ -170,6 +170,12 @@
       return;
     }
 
+    // Middle mouse button or Ctrl+Left for panning the view
+    if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+      return;
+    }
+
+
     e.preventDefault();
     e.stopPropagation();
     onSelect(inst.id);
@@ -298,6 +304,7 @@
         onSelect(null);
 
         if (!signalTrackStart) {
+          // First click: set start point
           signalTrackStart = snapped;
           signalTrackHover = snapped;
         } else {
@@ -315,10 +322,10 @@
             config.signalTracks = nextTracks;
             selectedSignalTrackIndex = nextTracks.length - 1;
           }
-          signalTrackStart = null;
-          signalTrackHover = null;
+          // Continuous mode: end point becomes new start
+          signalTrackStart = end;
+          signalTrackHover = end;
           onSelect(null);
-          signalTrackDrawMode = false;
         }
         return;
       }
@@ -381,7 +388,7 @@
   }
 
   function resetView() {
-    zoomLevel = 1;
+    zoomLevel = 0.8;
     panX = 0;    
     panY = 0;
   }
@@ -467,12 +474,91 @@
     }
   }
 
-  
+
+    function onPreviewContextMenu(e) {
+    if (trackDrawMode) {
+      e.preventDefault();
+      if (signalTrackStart) {
+        // First right-click: finish chain, stay in draw mode
+        signalTrackStart = null;
+        signalTrackHover = null;
+        selectedSignalTrackIndex = null;
+      } else {
+        // Second right-click (no active chain): exit draw mode
+        signalTrackDrawMode = false;
+        selectedSignalTrackIndex = null;
+      }
+    }
+  }
+
   function onWindowKeyDown(e) {
-    if (e.key !== 'Escape' || !trackDrawMode) return;
-    signalTrackStart = null;
-    signalTrackHover = null;
-    signalTrackDrawMode = false;
+  if (e.key === 'Escape' && trackDrawMode) {
+      e.preventDefault();
+      if (signalTrackStart) {
+        // First ESC: cancel current segment, stay in draw mode
+        signalTrackStart = null;
+        signalTrackHover = null;
+        selectedSignalTrackIndex = null;
+      } else {
+        // Second ESC (no active segment): exit draw mode
+        signalTrackDrawMode = false;
+        selectedSignalTrackIndex = null;
+      }
+      return;
+    }
+
+        // Delete / Backspace: remove selected element
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Don't intercept if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      if (selectedSignalTrackIndex !== null) {
+        e.preventDefault();
+        config.signalTracks = (config.signalTracks || []).filter((_, i) => i !== selectedSignalTrackIndex);
+        selectedSignalTrackIndex = null;
+      } else if (selectedInstanceId !== null) {
+        e.preventDefault();
+        // Check if it's a module or adapter and remove it
+        const isModule = modules.some(m => m.id === selectedInstanceId);
+        if (isModule) {
+          modules = modules.filter(m => m.id !== selectedInstanceId);
+        } else {
+          adapters = adapters.filter(a => a.id !== selectedInstanceId);
+        }
+        onSelect(null);
+      }
+      return;
+    }
+
+        // Space: rotate selected module/adapter by 90°
+    if (e.key === ' ' && selectedInstanceId !== null) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      e.preventDefault();
+      const isModule = modules.some(m => m.id === selectedInstanceId);
+      if (isModule) {
+        modules = modules.map(m => m.id === selectedInstanceId
+          ? { ...m, rotation: ((m.rotation || 0) + 1) % 4 } : m);
+      } else {
+        adapters = adapters.map(a => a.id === selectedInstanceId
+          ? { ...a, rotation: ((a.rotation || 0) + 1) % 4 } : a);
+      }
+      return;
+    }
+    
+    // Ctrl+Z: undo last track
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      const tracks = config.signalTracks || [];
+      if (tracks.length > 0) {
+        e.preventDefault();
+        config.signalTracks = tracks.slice(0, -1);
+        selectedSignalTrackIndex = null;
+        // In continuous mode, reset start point since the chain is broken
+        if (signalTrackStart) {
+          signalTrackStart = null;
+          signalTrackHover = null;
+        }
+      }
+    }
   }
 
   $effect(() => {
@@ -494,6 +580,7 @@
   onwheel={onPreviewWheel}
   onpointerdown={onPreviewPointerDown}
   onpointermove={onPreviewPointerMove}
+  oncontextmenu={onPreviewContextMenu}
   ontouchstart={onPreviewTouchStart}
   ontouchmove={onPreviewTouchMove}
   ontouchend={onPreviewTouchEnd}
@@ -538,33 +625,28 @@
     {@const y1 = grid.gridBottom + track.startRow * config.pitch}
     {@const x2 = grid.gridLeft + track.endCol * config.pitch}
     {@const y2 = grid.gridBottom + track.endRow * config.pitch}
+        <!-- Selection highlight (only when selected) -->
+    {#if selectedSignalTrackIndex === index}
     <line
       x1={x1} y1={y1}
       x2={x2} y2={y2}
-      stroke={selectedSignalTrackIndex === index ? '#f9e2af' : 'transparent'}
-      stroke-width={selectedSignalTrackIndex === index ? RAIL_TRACE_WIDTH + 0.5 : RAIL_TRACE_WIDTH + 0.3}
+      stroke="#f9e2af"
+      stroke-width={RAIL_TRACE_WIDTH + 0.4}
       stroke-linecap="round"
-      opacity={selectedSignalTrackIndex === index ? '0.95' : '0.75'}
+      opacity="0.9"
+    />
+    {/if}
+    <!-- Wider invisible hitbox for click selection -->
+    <line
+      x1={x1} y1={y1}
+      x2={x2} y2={y2}
+      stroke="transparent"
+      stroke-width={RAIL_TRACE_WIDTH + 0.8}
+      stroke-linecap="round"
       onpointerdown={(e) => onSignalTrackPointerDown(e, index)}
       style="cursor: pointer;"
     />
   {/each}
-
-  {#if trackDrawMode && signalTrackStart && signalTrackHover}
-    {@const sx = grid.gridLeft + signalTrackStart.col * config.pitch}
-    {@const sy = grid.gridBottom + signalTrackStart.row * config.pitch}
-    {@const ex = grid.gridLeft + signalTrackHover.col * config.pitch}
-    {@const ey = grid.gridBottom + signalTrackHover.row * config.pitch}
-    <line
-      x1={sx} y1={sy}
-      x2={ex} y2={ey}
-      stroke="#f9e2af"
-      stroke-width={RAIL_TRACE_WIDTH}
-      stroke-dasharray="0.8 0.4"
-      stroke-linecap="round"
-      opacity="0.95"
-    />
-  {/if}
 
   <!-- Power rail traces -->
   {#each traces as t}
@@ -615,6 +697,29 @@
       fill={colors.mountHole}
     />
   {/each}
+
+  <!-- Signal track drawing preview (above pads so markers are visible) -->
+    {#if trackDrawMode && signalTrackStart}
+    {@const sx = grid.gridLeft + signalTrackStart.col * config.pitch}
+    {@const sy = grid.gridBottom + signalTrackStart.row * config.pitch}
+    <!-- Start point marker -->
+    <circle cx={sx} cy={sy} r={0.4} fill="#f9e2af" opacity="0.9" />
+    {#if signalTrackHover && (signalTrackHover.col !== signalTrackStart.col || signalTrackHover.row !== signalTrackStart.row)} 
+    {@const ex = grid.gridLeft + signalTrackHover.col * config.pitch}
+    {@const ey = grid.gridBottom + signalTrackHover.row * config.pitch}
+    <line
+      x1={sx} y1={sy}
+      x2={ex} y2={ey}
+      stroke="#f9e2af"
+      stroke-width={RAIL_TRACE_WIDTH}
+      stroke-dasharray="0.8 0.4"
+      stroke-linecap="round"
+      opacity="0.95"
+    />
+      <!-- End point marker -->
+      <circle cx={ex} cy={ey} r={0.3} fill="none" stroke="#f9e2af" stroke-width="0.15" opacity="0.8" />
+    {/if}
+  {/if}
 
   <!-- Silkscreen labels -->
   {#each labelStrokes as polyline}

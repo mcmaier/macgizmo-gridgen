@@ -202,15 +202,18 @@
   <div class="control-group">
     <div class="track-actions">
       <button class="rail-btn" class:active={trackDrawMode} onclick={trackDrawModeToggle}>
-        Draw Signal Track
+          {trackDrawMode ? '✏️ Drawing...' : 'Draw Track'}
       </button>
       <button class="rail-btn track-delete-btn" onclick={onDeleteCustomTracks} disabled={selectedSignalTrackIndex === null}>
-        Delete Selected Track
+        Delete Selected
       </button>
       <button class="rail-btn track-delete-btn" onclick={onDeleteAllCustomTracks} disabled={customTrackCount === 0}>
-        Delete Tracks ({customTrackCount})
+        Delete All ({customTrackCount})
       </button>
     </div>
+    {#if trackDrawMode}
+      <div class="track-hints">Click start → click end · Right-click to finish chain · ESC to cancel · Ctrl+Z undo</div>
+    {/if}
   </div>
 
   <div class="control-group">
@@ -390,6 +393,13 @@
   .track-delete-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  
+  .track-hints {
+    font-size: 10px;
+    color: #a6adc8;
+    padding: 2px 0;
+    line-height: 1.4;
   }
 
   .info {

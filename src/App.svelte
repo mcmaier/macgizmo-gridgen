@@ -1,12 +1,10 @@
 <script>
-  import { writable } from 'svelte/store';
   import Controls from './components/Controls.svelte';
   import Preview from './components/Preview.svelte';
   import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
   import { getRotatedAdapter } from './lib/adapters.js';
-  import { fullscreen } from './lib/fullscreen.js';
   import { parseProject, serializeProject } from './lib/projectFile.js';
 
   const defaultConfig = {
@@ -101,19 +99,44 @@
     }
   }
 
-  const fullscreenStore = writable(false);
 
-  function toggleFullscreen(node) {
-    if (!$fullscreenStore) {
-      node.requestFullscreen();
+  let isFullscreen = $state(false);
+
+  // Sync state with actual browser fullscreen (handles ESC, F11, API calls)
+  $effect(() => {
+    const onFsChange = () => {
+      isFullscreen = !!document.fullscreenElement;
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  });
+
+  // Intercept F11 to use our app-level fullscreen on the #main-app element
+  $effect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  function toggleFullscreen() {
+    const el = document.getElementById('main-app');
+    if (!document.fullscreenElement) {
+      el?.requestFullscreen();
     } else {
       document.exitFullscreen();
     }
-    fullscreenStore.update(v => !v);
   }
 
   function toggleSignalTrackDrawMode() {
     signalTrackDrawMode = !signalTrackDrawMode;
+        if (!signalTrackDrawMode) {
+      selectedSignalTrackIndex = null;
+    }
   }
 
   function clearCustomSignalTracks() {
@@ -174,33 +197,33 @@
 
 </script>
 
-<div use:fullscreen={{toggle: toggleFullscreen}} class="ppp-app" id="main-app">
-<div style="display:flex; flex-direction: row; justify-content:space-between;">
-  <div class="ppp-header">
-    <span class="subtitle">Parametric Prototype PCB Generator</span>      
-  </div>
-  <button id="fullscreen-toggle" onclick={() => toggleFullscreen(document.getElementById("main-app"))} title={$fullscreenStore ? 'Vollbild verlassen' : 'Vollbild'}>
-      {#if $fullscreenStore}
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="1f1f1f" class="bi bi-fullscreen-exit" viewBox="0 0 16 16">
-          <path d="M5.5 0a.5.5 0 0 1 .5.5v4A1.5 1.5 0 0 1 4.5 6h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5m5 0a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 10 4.5v-4a.5.5 0 0 1 .5-.5M0 10.5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 6 11.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5m10 1a1.5 1.5 0 0 1 1.5-1.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0z"/>
-          <!-- Exit Path --></svg>
-      {:else}
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="1f1f1f" class="bi bi-fullscreen" viewBox="0 0 16 16">
-          <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5M.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5m15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5"/>
-        <!-- Enter Path --></svg>
-      {/if}
-  </button>
+<div class="ppp-app" id="main-app">
+  <div class="ppp-header-row">
+    <div class="ppp-header">
+      <span class="subtitle">Parametric Prototype PCB Generator</span>      
+    </div>
+    <button id="fullscreen-toggle" onclick={toggleFullscreen} title={isFullscreen ? 'Vollbild verlassen' : 'Vollbild'}>
+        {#if isFullscreen}
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="1f1f1f" class="bi bi-fullscreen-exit" viewBox="0 0 16 16">
+            <path d="M5.5 0a.5.5 0 0 1 .5.5v4A1.5 1.5 0 0 1 4.5 6h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5m5 0a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 10 4.5v-4a.5.5 0 0 1 .5-.5M0 10.5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 6 11.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5m10 1a1.5 1.5 0 0 1 1.5-1.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0z"/>
+            <!-- Exit Path --></svg>
+        {:else}
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="1f1f1f" class="bi bi-fullscreen" viewBox="0 0 16 16">
+            <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5M.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5m15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5"/>
+          <!-- Enter Path --></svg>
+        {/if}
+    </button>
   </div>
 
   <div class="ppp-layout">
     <aside class="ppp-sidebar">
-            <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
+      <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
     </aside>
     <main class="ppp-main">
       <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} />
       <Preview bind:config bind:modules bind:adapters bind:signalTrackDrawMode {selectedInstanceId} {onSelect} {selectedSignalTrackIndex} onSelectSignalTrack={selectSignalTrack} />
     </main>
-  </div>
+  </div>  
 
   <div class="ppp-footer">
     <span>MacGizmo GridGen - Parametric Prototype PCB Generator v{__APP_VERSION__} Beta - Powered by macgizmo.com</span>
@@ -209,6 +232,7 @@
 
 <style>
   :root {
+    isolation: isolate;
     background: #1f1f1f;
   }
 
@@ -218,10 +242,19 @@
   }
 
   .ppp-app {
+    height: 100vh;
     width: 100%;
     padding: 20px;
+    display:flex;
+    flex-direction: column;
     font-family: 'Segoe UI', system-ui, sans-serif;
     color: #fcfaf9;    
+  }
+
+  .ppp-header-row {
+    display:flex; 
+    flex-direction: row; 
+    justify-content:space-between;
   }
 
   .ppp-header {
@@ -246,14 +279,14 @@
 
   .ppp-sidebar {
     position: sticky;
-    top: 20px;
   }
 
   .ppp-main {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-height: 300px;   
+    min-height: 300px; 
+    flex: 1 1 auto; 
     max-width: 100vw; 
   }
 
@@ -273,7 +306,6 @@
     align-content: center;
     justify-content: center;
     border-radius: 5px;
-
   }
 
   @media (max-width: 640px) {
@@ -283,6 +315,10 @@
 
     .ppp-sidebar {
       position: static;
+    }
+
+    #fullscreen-toggle { 
+      display: none;
     }
   }
 </style>

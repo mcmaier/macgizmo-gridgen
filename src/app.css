@@ -2,7 +2,7 @@
 #ppp-configurator-app,
 #app {
   background: #1f1f1f;
-  min-height: 100%;
+  min-height: 80vh;
 }
 
 *,
