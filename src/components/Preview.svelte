@@ -849,12 +849,17 @@
     {@const a = adapterToMm(inst)}
     {@const hasConflict = adapterConflicts.has(inst.id)}
     {@const isSelected = selectedInstanceId === inst.id}
-    {@const adpDef = ADAPTER_LIBRARY.find(ad => ad.id === inst.adapterId)}
-    {@const adapterOverlayUrl = getAdapterOverlayUrl(adpDef)}
-    {@const outW = a.ra.outline.width}
-    {@const outH = a.ra.outline.height}
 
     {#if a}
+      {@const adpDef = ADAPTER_LIBRARY.find(ad => ad.id === inst.adapterId)}
+      {@const adapterOverlayUrl = getAdapterOverlayUrl(adpDef)}
+      {@const outW = a.def.outline?.width || (a.def.widthPins - 1) * a.pitch}
+      {@const outH = a.def.outline?.height || (a.def.heightPins - 1) * a.pitch}
+      {@const oOfs = a.def.outlineOffset || { x: 0, y: 0 }}
+      {@const pinW = (a.def.widthPins - 1) * a.pitch}
+      {@const pinH = (a.def.heightPins - 1) * a.pitch}
+      {@const ofsX = (outW - pinW) / 2 - oOfs.x}
+      {@const ofsY = (outH - pinH) / 2 - oOfs.y}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g class="module-overlay adapter-overlay"
         class:dragging={dragging?.instanceId === inst.id}
@@ -978,8 +983,8 @@
         
         <!-- Adapter PNG overlay -->
         {#if showAdapterOverlays && adapterOverlayUrl}
-          {@const imgX = a.x}
-          {@const imgY = a.y}
+          {@const imgX = a.x - ofsX}
+          {@const imgY = a.y - ofsY}
           {@const rot = (inst.rotation || 0) % 4}
           {@const cx = imgX + outW / 2}
           {@const cy = imgY + outH / 2}

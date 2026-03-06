@@ -80,8 +80,11 @@ export const MODULE_LIBRARY = [
       { x: 0, y: 0, count: 15, dx: 0, dy: 1 },
       { x: 6, y: 0, count: 15, dx: 0, dy: 1 },
     ],
-    outline: { width: 18.0, height: 43.2 },
+    outline: { width: 18.5, height: 43.2},
+    outlineOffset: { x: 0, y: 0.5 },  // body extends above the pin row
     color: '#3080d0',
+    overlay: true,
+
   },
   {
     id: 'arduino-pro-mini',
@@ -94,8 +97,10 @@ export const MODULE_LIBRARY = [
       { x: 0, y: 0, count: 12, dx: 0, dy: 1 },
       { x: 6, y: 0, count: 12, dx: 0, dy: 1 },
     ],
-    outline: { width: 18.0, height: 33.0 },
+    outline: { width: 18.2, height: 33.2 },
     color: '#30a050',
+    outlineOffset: { x: 0, y: -1.2 },  // body extends above the pin row    
+    overlay: true,
   },
   {
     id: 'esp8266-nodemcu',
@@ -109,7 +114,9 @@ export const MODULE_LIBRARY = [
       { x: 9, y: 0, count: 15, dx: 0, dy: 1 },
     ],
     outline: { width: 25.6, height: 48.6 },
+    outlineOffset: { x: 0, y: 0.5 },  // body extends above the pin row    
     color: '#d0a030',
+    overlay: false,
   },
   {
     id: 'raspberry-pi-pico',

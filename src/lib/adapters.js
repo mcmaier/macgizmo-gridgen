@@ -163,7 +163,7 @@ export const ADAPTER_LIBRARY = [
     outline: { width: 12.2, height: 7.1 },
     outlineOffset: { x: 0, y: 0 },
     widthPins: 5,
-    heightPins: 3,
+    heightPins: 3,    
     //silkLabel: { text: 'GRID', x: 5.08, y: 2.54, height: 1.0 },
   },
 
@@ -251,7 +251,7 @@ export const ADAPTER_LIBRARY = [
   // Using 0805 dimensions (fits 0603 too, just less pad overlap)
   // ═══════════════════════════════════════════════════════════════════  
   {
-    id: 'smd2-3',
+    id: 'smd0805',
     name: 'R,L,C 0603/0805 (1×3)',
     category: 'Passive',
     pitch: 2.54,
@@ -287,6 +287,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 1,
     heightPins: 3,
+    overlay: true,
     //silkLabel: { text: '0805', x: 0.0, y: 2.54, height: 0.8 },
   },
 
@@ -329,6 +330,7 @@ export const ADAPTER_LIBRARY = [
     outlineOffset: { x: 0, y: 0 },
     widthPins: 4,
     heightPins: 1,
+    overlay: true,
     //silkLabel: { text: '1206', x: 3.81, y: 0.0, height: 0.8 },
   },
 
@@ -384,6 +386,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 3,
     heightPins: 2,
     silkLabel: { text: 'SOT23', x: 4, y: 2.5, height: 0.8 },
+    overlay: true,
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -454,6 +457,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 4,
     heightPins: 3,
     silkLabel: { text: 'SOT23-6', x: 3.81, y: 0, height: 0.8 },
+    overlay: true,
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -512,7 +516,8 @@ export const ADAPTER_LIBRARY = [
   outlineOffset: { x: 0, y: 0 },
   widthPins: 3,
   heightPins: 2,
-    silkLabel: { text: 'SC70', x: 4.5, y: 2.5, height: 0.8 },
+  silkLabel: { text: 'SC70', x: 4.5, y: 2.5, height: 0.8 },
+  overlay: true,
 },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -581,6 +586,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 4,
     heightPins: 3,
     silkLabel: { text: 'SC70-6', x: 3.81, y: 0, height: 0.8 },
+    overlay: true,
   },
     {
     id: 'sot223',
@@ -701,6 +707,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 5,
     heightPins: 4,
     silkLabel: { text: 'SOIC-8', rotation: 90, x: 5.08, y: 3.81, height: 0.9 },
+    overlay: true,
   },
 
   
@@ -827,6 +834,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 5,
     heightPins: 6,
     silkLabel: { text: 'SOIC-16', rotation: 90, x: 5.08, y: 6.35, height: 0.9 },
+    overlay: true,
   }, 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -984,6 +992,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 8,
     heightPins: 8,
     silkLabel: { text: 'SOIC-16/20W', rotation: 90, x: 8.89, y: 8.89, height: 1 },
+    overlay: true,
   }, 
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1097,6 +1106,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 5,
     heightPins: 4,
     silkLabel: { text: 'MSOP-8/12', rotation: 90, x: 5.08, y: 3.81, height: 0.8 },
+    overlay: true,
   },
 
   
@@ -1183,6 +1193,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 5,
     heightPins: 4,
     silkLabel: { text: 'TSSOP-8', rotation: 90, x: 5.08, y: 3.81, height: 0.8 },
+    overlay: true,
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1325,6 +1336,7 @@ export const ADAPTER_LIBRARY = [
     widthPins: 6,
     heightPins: 6,
     silkLabel: { text: 'TSSOP-16', rotation: 90, x: 6.35, y: 6.35, height: 0.8 },
+    overlay: true,
   },   
   {
     id: 'lmr5140',
