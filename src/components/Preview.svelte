@@ -5,10 +5,11 @@
   import { getTextStrokes } from '../lib/font.js';
   
   let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable(), selectedSignalTrackIndex = null, onSelectSignalTrack } = $props();
-
   let fullConfig = $derived({
     ...config,
   });
+
+  const minZoomLevel = 0.8;
 
   let trackDrawMode = $derived(signalTrackDrawMode);
 
@@ -74,7 +75,7 @@
   let labelPad = 3;
 
   // Zoom & pan state
-  let zoomLevel = $state(1); // 1 = fit whole board, >1 = zoomed in
+  let zoomLevel = $state(minZoomLevel); // 1 = fit whole board, >1 = zoomed in
   let panX = $state(0); // pan offset in board-mm
   let panY = $state(0);
   let isPanning = $state(false);
@@ -242,7 +243,7 @@
   function onPreviewWheel(e) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    zoomLevel = Math.max(1, Math.min(10, zoomLevel + delta * zoomLevel));
+    zoomLevel = Math.max(minZoomLevel, Math.min(10, zoomLevel + delta * zoomLevel));
   }
 
   function snapToGridPoint(e) {
@@ -388,7 +389,7 @@
   }
 
   function resetView() {
-    zoomLevel = 0.8;
+    zoomLevel = 1;
     panX = 0;    
     panY = 0;
   }
@@ -457,7 +458,7 @@
       // Pinch zoom
       const newDist = getTouchDist(e.touches);
       const zoomDelta = newDist / touchState.startDist;
-      zoomLevel = Math.max(1, Math.min(10, touchState.startZoom * zoomDelta));
+      zoomLevel = Math.max(minZoomLevel, Math.min(10, touchState.startZoom * zoomDelta));
 
       // Two-finger pan
       const newCenter = getTouchCenter(e.touches);
@@ -959,7 +960,7 @@
 <!-- Zoom controls overlay -->
 <div class="zoom-controls">
   <button class="zoom-btn" onclick={resetView} title="Reset view">⟲</button>
-  <button class="zoom-btn" onclick={() => zoomLevel = Math.max(1, zoomLevel / 1.3)} title="Zoom out">−</button>
+  <button class="zoom-btn" onclick={() => zoomLevel = Math.max(minZoomLevel, zoomLevel / 1.3)} title="Zoom out">−</button>
   <input type="range" class="zoom-slider" min="1" max="10" step="0.1"
     bind:value={zoomLevel} title="Zoom: {Math.round(zoomLevel * 100)}%" />
   <button class="zoom-btn" onclick={() => zoomLevel = Math.min(10, zoomLevel * 1.3)} title="Zoom in">+</button>
