@@ -239,6 +239,7 @@
   :global(div:fullscreen) {
     width: 100vw !important;
     height: 100vh !important;
+    overflow: auto;
   }
 
   .ppp-app {
