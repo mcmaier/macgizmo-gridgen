@@ -169,26 +169,40 @@ export function isInKeepout(x, y, holes) {
  * Grid extends as far as possible while staying >= 1 pitch from edges.
  */
 export function computeGrid(config) {
-  const { width, height, pitch, labels = {} } = config;
-  //const margin = pitch; // minimum edge distance  
+  const { width, height, pitch, labels = {}, padDiameter = 1.0, annularRing = 0.3 } = config;
 
-  let marginCols = pitch + 0.5; // minimum edge distance  
-  let marginRows = pitch + 0.5;
+  // Label dimension constants (must match generateLabelStrokes)
+  const h = LABEL_HEIGHT;
+  const copperRadius = (padDiameter + annularRing * 2) / 2;
+  const labelGap = copperRadius + h * 0.8; // distance from pad center to text anchor
+
+  // Text width: scale = h/5, charWidth = 2*scale, charGap = 1*scale
+  const fontScale = h / 5;
+  const charW = 2 * fontScale;
+  const charGapW = 1 * fontScale;
+  function textWidth(maxChars) {
+    return maxChars * charW + Math.max(0, maxChars - 1) * charGapW;
+  }
+
+  // Base margin: enough to keep pads away from board edge
+  const baseMargin = pitch * 0.5 + copperRadius;
+  const edgePad = 0.5; // clearance to board edge
+
+  // Row labels on left+right: gap from pad center + text width + edge clearance
+  let marginCols = baseMargin;
   let offsetCols = 0;
-  let offsetRows = 0;  
-
-  if(labels.rows)
-  {
-    //marginCols += 0.5;
-    offsetCols = 0.2;
+  if (labels.rows) {
+    const approxRows = Math.floor((height - 2 * baseMargin) / pitch);
+    const maxDigits = String(Math.max(1, approxRows)).length;
+    marginCols = Math.max(baseMargin, labelGap + textWidth(maxDigits) + edgePad);
   }
 
-  if(labels.cols)
-  {
-    marginRows +=  0.2;
-    offsetRows = 0.2;
+  // Column labels on top+bottom: gap from pad center + text half-height + edge clearance
+  let marginRows = baseMargin;
+  let offsetRows = 0;
+  if (labels.cols) {
+    marginRows = Math.max(baseMargin, labelGap + h * 0.5 + edgePad);
   }
-  
 
   // Number of columns/rows that fit
   const cols = Math.max(0, Math.floor((width - 2 * marginCols) / pitch + 1));
@@ -1164,7 +1178,7 @@ export function generateLabelStrokes(config) {
     ];
   }
 
-  // ── Row labels (left side, numbers 1-based) ──
+  // ── Row labels (left & right side, numbers 1-based) ──
   // Gerber coords: Y increases upward, row 0 is at gridTop (highest Y)
   const rowStep = labels.rows || 0;
   if (rowStep > 0) {
@@ -1172,28 +1186,34 @@ export function generateLabelStrokes(config) {
     for (let row = sigRowStart; row <= sigRowEnd; row++) {
       const sigRow = row - sigRowStart;
       const y = gridTop - row * pitch;
-      const x = gridLeft - gap;
+      const xLeft = gridLeft - gap;
+      const xRight = gridRight + gap;
 
       if (shouldLabel(sigRow, sigRowCount, rowStep)) {
-        // Full text label – skip if overlapping mounting hole
-        if (!labelOverlapsHole(x, y)) {
-          const text = String(sigRow + 1);
-          const strokes = getTextStrokes(text, x, y, h, 'right');
-          allStrokes.push(...strokes);
-                  }
-        } else if (rowStep > 1) {
-        // Tick mark for intermediate rows (only when not labeling every row)
-            const tx = gridLeft - gap;
-            if (!labelOverlapsHole(tx, y)) {
-              allStrokes.push(...tickMark(tx, y));
-            }
-          }
+        const text = String(sigRow + 1);
+        // Left side (right-aligned text)
+        if (!labelOverlapsHole(xLeft, y)) {
+          allStrokes.push(...getTextStrokes(text, xLeft, y, h, 'right'));
+        }
+        // Right side (left-aligned text)
+        if (!labelOverlapsHole(xRight, y)) {
+          allStrokes.push(...getTextStrokes(text, xRight, y, h, 'left'));
+        }
+      } else if (rowStep > 1) {
+        // Tick marks for intermediate rows
+        if (!labelOverlapsHole(xLeft, y)) {
+          allStrokes.push(...tickMark(xLeft, y));
+        }
+        if (!labelOverlapsHole(xRight, y)) {
+          allStrokes.push(...tickMark(xRight, y));
+        }
       }
+    }
   }
 
   // ── Column labels (top side, letters A-based) ──
   const colStep = labels.cols || 0;
-  if (colStep > 0) {
+  if (colStep === 1) {
     const sigColCount = sigColEnd - sigColStart;
     for (let col = sigColStart; col <= sigColEnd; col++) {
       const sigCol = col - sigColStart;
@@ -1207,13 +1227,7 @@ export function generateLabelStrokes(config) {
       const strokes = getTextStrokes(text, x, y, h, 'center');
       allStrokes.push(...strokes);
               }
-      } else if (colStep > 1) {
-        // Tick mark for intermediate columns (only when not labeling every col)
-        const ty = gridTop + gap;
-        if (!labelOverlapsHole(x, ty)) {
-          allStrokes.push(...tickMark(x, ty));
-        }
-      }
+      } 
     }
   }
 

@@ -130,6 +130,12 @@
     config.labels = { ...config.labels, [which]: next };
   }
 
+  function toggleLabels(which) {
+    const current = config.labels[which];    
+    const next = current ? 0 : 1;
+    config.labels = { ...config.labels, [which]: next };
+  }
+
   function labelButtonText(which) {
     const step = config.labels[which];
     const prefix = which === 'rows' ? 'Rows' : 'Cols';
@@ -257,7 +263,7 @@
       <button class="rail-btn" class:active={config.labels.rows > 0}
         onclick={() => cycleLabelStep('rows')}>{labelButtonText('rows')}</button>
       <button class="rail-btn" class:active={config.labels.cols > 0}
-        onclick={() => cycleLabelStep('cols')}>{labelButtonText('cols')}</button>
+        onclick={() => toggleLabels('cols')}>{labelButtonText('cols')}</button>
     </div>
   </div>
 

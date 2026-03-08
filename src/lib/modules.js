@@ -52,8 +52,9 @@ export const MODULE_LIBRARY = [
       { x: 0, y: 0, count: 19, dx: 0, dy: 1 },
       { x: 10, y: 0, count: 19, dx: 0, dy: 1 },
     ],
-    outline: { width: 25.4, height: 55.3 },
+    outline: { width: 28.6, height: 55.3 },
     color: '#e06030',
+    overlay: true,
   },
   {
     id: 'esp32-s3-devkit-44pin',
@@ -66,8 +67,9 @@ export const MODULE_LIBRARY = [
       { x: 0, y: 0, count: 22, dx: 0, dy: 1 },
       { x: 10, y: 0, count: 22, dx: 0, dy: 1 },
     ],
-    outline: { width: 28, height: 58 },
+    outline: { width: 28, height: 70.1 },
     color: '#e06030',
+    overlay: true,
   },
   {
     id: 'arduino-nano',
@@ -113,38 +115,42 @@ export const MODULE_LIBRARY = [
       { x: 0, y: 0, count: 15, dx: 0, dy: 1 },
       { x: 9, y: 0, count: 15, dx: 0, dy: 1 },
     ],
-    outline: { width: 25.6, height: 48.6 },
-    outlineOffset: { x: 0, y: 0.5 },  // body extends above the pin row    
+    outline: { width: 25.6, height: 48.5 },
+    outlineOffset: { x: 0, y: -0.3 },  // body extends above the pin row    
     color: '#d0a030',
-    overlay: false,
+    overlay: true,
   },
   {
     id: 'raspberry-pi-pico',
     name: 'Raspberry Pi Pico',
     category: 'Microcontroller',
     pitch: 2.54,
-    widthPins: 7,
+    widthPins: 8,
     heightPins: 20,
     pinRows: [
       { x: 0, y: 0, count: 20, dx: 0, dy: 1 },
-      { x: 6, y: 0, count: 20, dx: 0, dy: 1 },
+      { x: 7, y: 0, count: 20, dx: 0, dy: 1 },
     ],
-    outline: { width: 21.0, height: 51.0 },
+    outline: { width: 21.5, height: 53.5 },
+    outlineOffset: { x: 0, y: 0.8 },
     color: '#40a070',
+    overlay: true,
   },
   {
     id: 'wemos-d1-mini',
     name: 'Wemos D1 Mini',
     category: 'Microcontroller',
     pitch: 2.54,
-    widthPins: 7,
+    widthPins: 10,
     heightPins: 8,
     pinRows: [
       { x: 0, y: 0, count: 8, dx: 0, dy: 1 },
-      { x: 6, y: 0, count: 8, dx: 0, dy: 1 },
+      { x: 9, y: 0, count: 8, dx: 0, dy: 1 },
     ],
-    outline: { width: 25.6, height: 34.2 },
+    outline: { width: 26, height: 35 },
+    outlineOffset: { x: 0, y: -0.4 },
     color: '#3070c0',
+    overlay: true,
   },
   {
     id: 'oled-128x64-i2c',
@@ -156,9 +162,10 @@ export const MODULE_LIBRARY = [
     pinRows: [
       { x: 0, y: 0, count: 4, dx: 1, dy: 0 },
     ],
-    outline: { width: 27.0, height: 27.0 },
-    outlineOffset: { x: 0, y: 10 },  // body extends above the pin row
+    outline: { width: 26, height: 26 },
+    outlineOffset: { x: 0, y: -11.2 },  // body extends above the pin row
     color: '#8080d0',
+    overlay: true,
   },
   {
     id: 'ds3231-rtc',
@@ -170,9 +177,10 @@ export const MODULE_LIBRARY = [
     pinRows: [
       { x: 0, y: 0, count: 6, dx: 0, dy: 1 },
     ],
-    outline: { width: 38.0, height: 22.0 },
-    outlineOffset: { x: 16, y: 0 },  // body extends above pin row
+    outline: { width: 38.8, height: 22.5},
+    outlineOffset: { x: 17.7, y: 0.4 },  // body extends above pin row
     color: '#30a0a0',
+    overlay: true,
   },
   {
     id: 'dfplayer-mini',
@@ -187,6 +195,7 @@ export const MODULE_LIBRARY = [
     ],
     outline: { width: 22, height: 21.0 },
     color: '#d05050',
+    overlay: true,
   },
   {
     id: 'dip8',

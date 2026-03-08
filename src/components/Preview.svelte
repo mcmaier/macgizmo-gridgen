@@ -26,6 +26,26 @@
   let customSignalTracks = $derived(Array.isArray(config.signalTracks) ? config.signalTracks : []);;
   let mountHoles = $derived(computeMountingHoles(fullConfig));
   let labelStrokes = $derived(generateLabelStrokes(fullConfig));
+
+  // Z-order: adapters first, modules on top, selected element always last (topmost)
+  let sortedAdapters = $derived(
+    [...adapters].sort((a, b) => {
+      if (a.id === selectedInstanceId) return 1;
+      if (b.id === selectedInstanceId) return -1;
+      return 0;
+    })
+  );
+  let sortedModules = $derived(
+    [...modules].sort((a, b) => {
+      if (a.id === selectedInstanceId) return 1;
+      if (b.id === selectedInstanceId) return -1;
+      return 0;
+    })
+  );
+  // Is the selected item an adapter? If so, render it above modules
+  let selectedIsAdapter = $derived(
+    selectedInstanceId != null && adapters.some(a => a.id === selectedInstanceId)
+  );
   let grid = $derived(computeGrid(fullConfig));
   
   // Detect adapter overlap and out-of-bounds issues
@@ -733,10 +753,11 @@
       stroke-linejoin="round"
       fill="none"
     />
-     {/each}      
-
+     {/each}
+  
+  
   <!-- Adapter overlays (real Gerber features) -->
-  {#each adapters as inst (inst.id)}
+  {#each sortedAdapters as inst (inst.id)}
     {@const a = adapterToMm(inst)}
     {@const hasConflict = adapterConflicts.has(inst.id)}
     {@const isSelected = selectedInstanceId === inst.id}
@@ -905,8 +926,8 @@
     {/if}
   {/each}    
 
-<!-- Module overlays -->
-  {#each modules as inst (inst.id)}
+  <!-- Module overlays -->
+  {#each sortedModules as inst (inst.id)}
     {@const m = moduleToMm(inst)}
     {@const isSelected = selectedInstanceId === inst.id}
     {#if m}
@@ -928,7 +949,7 @@
         class="module-overlay"
         class:dragging={dragging?.instanceId === inst.id}
         onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
-        style="cursor: grab;"
+        style="cursor: {showModuleOverlays ? 'grab' : 'default'}; pointer-events: {showModuleOverlays ? 'auto' : 'none'};"
       >
         <!-- Selection highlight -->
         {#if isSelected}
@@ -953,10 +974,11 @@
           width={outW}
           height={outH}
           fill={inst.color}
-          fill-opacity="0.2"
+          //fill-opacity="0.2"
+          fill-opacity = {showModuleOverlays ? "0.25" : "0.1"}
           stroke={inst.color}
           stroke-width="0.3"
-          stroke-dasharray="1 0.5"
+          stroke-dasharray = {showModuleOverlays ? "" : "1 0.5"}
           rx="0.5"
         />
 
@@ -1003,7 +1025,7 @@
             text-anchor="middle"
             dominant-baseline="central"
             fill={inst.color}
-            fill-opacity="0.8"
+            fill-opacity = {showModuleOverlays ? "0.85" : "0.5"}
             font-size="{Math.min(2.5, outW * 0.1)}"
             font-family="'Segoe UI', system-ui, sans-serif"
             font-weight="600"
@@ -1013,6 +1035,25 @@
     {/if}
   {/each}
 
+  <!-- Topmost interaction layer: when an adapter is selected, render its hitbox above modules -->
+  {#if selectedIsAdapter}
+    {#each adapters.filter(a => a.id === selectedInstanceId) as inst (inst.id)}
+      {@const a = adapterToMm(inst)}
+      {#if a}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <rect
+          x={a.x - 1}
+          y={a.y - 1}
+          width={(a.def.widthPins - 1) * a.pitch + 2}
+          height={(a.def.heightPins - 1) * a.pitch + 2}
+          fill="transparent"
+          stroke="none"
+          onpointerdown={(e) => onItemPointerDown(e, inst, 'adapter')}
+          style="cursor: grab;"
+        />
+      {/if}
+    {/each}
+  {/if}
   </g>
 </svg>
 
