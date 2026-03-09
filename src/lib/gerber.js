@@ -916,9 +916,10 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
             if (f.type === 'pad') {
               const mw = f.w + maskExpansion * 2;
               const mh = f.h + maskExpansion * 2;
-              const key = `${mw.toFixed(4)},${mh.toFixed(4)}`;
+
+              const key = padKey(mw, mh, f.rotation);
               if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
-              adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
+                adapterMask.push({ x: originX + f.x, y: originY + f.y, aperture: rectApertures.get(key) });
             }
           }
         }

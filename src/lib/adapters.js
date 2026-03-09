@@ -1693,7 +1693,7 @@ export const ADAPTER_LIBRARY = [
     heightPins: 6,
     silkLabel: { text: 'LMR-51430', rotation: 0, x: 9, y: 0, height: 0.9 },
   },
-  */ 
+  */   
 ];
 
 

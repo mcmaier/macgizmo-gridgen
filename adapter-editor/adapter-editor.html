@@ -27,18 +27,66 @@ const COLORS = {
 };
 
 const DEFAULT_ADAPTER = {
-  id: "soic8", name: "SOIC-8", category: "SOIC",
+  id: "ic-id", name: "New IC", category: "Not Set",
   widthPins: 4, heightPins: 4,
   originOffset: { x: 0, y: 0, rot: 0 },
   smdPads: [], traces: [], throughPins: [], silkBody: null, silkLines: [], silkText: [],
 };
 
 function parseKicadMod(text) {
-  const pads = [], silkLines = [];
+  const topPads = [], bottomPads = [], vias = [], silkLines = [];
   let bodyPoly = null, m;
-  const padRegex = /\(pad\s+"(\d+)"\s+smd\s+\w+\s*\n?\s*\(at\s+([-\d.]+)\s+([-\d.]+)(?:\s+([-\d.]+))?\)\s*\n?\s*\(size\s+([-\d.]+)\s+([-\d.]+)\)/g;
-  while ((m = padRegex.exec(text)) !== null) {
-    pads.push({ pin: parseInt(m[1]), x: parseFloat(m[2]), y: parseFloat(m[3]), rotation: parseFloat(m[4] || 0), w: parseFloat(m[5]), h: parseFloat(m[6]) });
+
+  const extractSExprBlocks = (source, head) => {
+    const blocks = [];
+    let pos = 0;
+    while ((pos = source.indexOf(head, pos)) !== -1) {
+      let depth = 0;
+      let end = pos;
+      for (; end < source.length; end++) {
+        if (source[end] === '(') depth++;
+        else if (source[end] === ')') {
+          depth--;
+          if (depth === 0) { end++; break; }
+        }
+      }
+      blocks.push(source.slice(pos, end));
+      pos = end;
+    }
+    return blocks;
+  };
+
+  const padBlocks = extractSExprBlocks(text.replace(/\r/g, ""), "(pad ");
+  for (const block of padBlocks) {
+    const header = block.match(/^\(pad\s+"([^"]*)"\s+(\w+)\s+(\w+)/);
+    const at = block.match(/\(at\s+([-\d.]+)\s+([-\d.]+)(?:\s+([-\d.]+))?\)/);
+    const size = block.match(/\(size\s+([-\d.]+)\s+([-\d.]+)\)/);
+    if (!header || !at || !size) continue;
+
+    const layerExpr = block.match(/\(layers\s+([^)]*)\)/);
+    const quotedLayers = layerExpr ? [...layerExpr[1].matchAll(/"([^"]+)"/g)].map(s => s[1]) : [];
+    const bareLayers = layerExpr ? layerExpr[1].replace(/"[^"]+"/g, "").trim().split(/\s+/).filter(Boolean) : [];
+    const layers = [...quotedLayers, ...bareLayers];
+
+    const drillMatch = block.match(/\(drill\s+([-\d.]+)/);
+    const pad = {
+      pin: header[1] || "",
+      type: header[2],
+      shape: header[3],
+      x: parseFloat(at[1]),
+      y: parseFloat(at[2]),
+      rotation: parseFloat(at[3] || 0),
+      w: parseFloat(size[1]),
+      h: parseFloat(size[2]),
+      drill: drillMatch ? parseFloat(drillMatch[1]) : 0,
+      layers,
+    };
+
+    if (layers.includes("F.Cu") || layers.includes("*.Cu")) topPads.push(pad);
+    if (layers.includes("B.Cu") || layers.includes("*.Cu")) bottomPads.push(pad);
+    if ((pad.type === "thru_hole" || pad.type === "np_thru_hole") && pad.drill > 0) {
+      vias.push({ x: pad.x, y: pad.y, size: roundTo(Math.max(pad.w, pad.h), 3), drill: roundTo(pad.drill, 3) });
+    }
   }
   const fabPolyRegex = /\(fp_poly\s*\n?\s*\(pts\s*\n?\s*([\s\S]*?)\)[\s\S]*?\(layer\s+"F\.Fab"\)/;
   const polyMatch = fabPolyRegex.exec(text);
@@ -48,7 +96,7 @@ function parseKicadMod(text) {
     while ((m = ptRegex.exec(polyMatch[1])) !== null) points.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
     if (points.length > 2) bodyPoly = points;
   }
-  return { pads, silkLines, bodyPoly };
+  return { topPads, bottomPads, vias, silkLines, bodyPoly };
 }
 
 /**
@@ -317,6 +365,7 @@ function parseKicadPcb(text) {
     return {
       ...imported,
       smdPads: (imported.smdPads || []).map(rotateWithPadRotation),
+      bottomPads: (imported.bottomPads || []).map(rotateWithPadRotation),
       topTraces: (imported.topTraces || []).map(t => ({ ...t, segments: rotateTraceSegments(t.segments || [], rotationDeg) })),
       bottomTraces: (imported.bottomTraces || []).map(t => ({ ...t, segments: rotateTraceSegments(t.segments || [], rotationDeg) })),
       vias: (imported.vias || []).map(v => {
@@ -428,6 +477,7 @@ function AdapterEditor() {
   const [importText, setImportText] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [maskExpansion, setMaskExpansion] = useState(0.05);
+  const [bottomPads, setBottomPads] = useState([]);
   const [bottomTraces, setBottomTraces] = useState([]);
   const [vias, setVias] = useState([]);
   const [showLayer, setShowLayer] = useState("both"); // "F.Cu", "B.Cu", "both"
@@ -522,19 +572,30 @@ function AdapterEditor() {
 
   const doImport = () => {
     const parsed = parseKicadMod(importText);
-    if (parsed.pads.length === 0) return;
+    if (parsed.topPads.length === 0 && parsed.bottomPads.length === 0) return;
+
+    const toEditorPad = (p, idx) => ({
+      pin: parseInt(p.pin) || (idx + 1),
+      x: roundTo(p.x, 3),
+      y: roundTo(-p.y, 3),
+      rotation: p.rotation ? roundTo(-p.rotation, 1) : 0,
+      w: roundTo(p.w, 3),
+      h: roundTo(p.h, 3),
+    });
     const imported = {
-      smdPads: parsed.pads.map(p => ({ pin: p.pin, x: roundTo(p.x, 3), y: roundTo(-p.y, 3), rotation: p.rotation ? roundTo(-p.rotation, 1) : 0, w: roundTo(p.w, 3), h: roundTo(p.h, 3) })),
+      smdPads: parsed.topPads.map(toEditorPad),
+      bottomPads: parsed.bottomPads.map(toEditorPad),
       silkBody: parsed.bodyPoly ? parsed.bodyPoly.map(p => ({ x: roundTo(p.x, 3), y: roundTo(-p.y, 3) })) : null,
       silkLines: [],
       silkText: [],
       topTraces: [],
       bottomTraces: [],
-      vias: [],
+      vias: parsed.vias.map(v => ({ x: roundTo(v.x, 3), y: roundTo(-v.y, 3), size: v.size, drill: v.drill })),
     };
     const rotated = applyFootprintRotationToImport(imported, adapter.originOffset.rot || 0);
     setAdapter(a => ({ ...a, smdPads: rotated.smdPads, silkBody: rotated.silkBody, silkLines: rotated.silkLines, silkText: rotated.silkText, traces: rotated.topTraces }));
     setBottomTraces(rotated.bottomTraces);
+    setBottomPads(rotated.bottomPads || []);
     setVias(rotated.vias);
     setShowImport(false);
   };
@@ -586,8 +647,14 @@ function AdapterEditor() {
     c += `      ],\n`;
 
     // B.Cu (copperBack)
-    if (bottomTraces.length > 0) {
+    if (bottomPads.length > 0 || bottomTraces.length > 0) {
       c += `      copperBack: [\n`;
+        bottomPads.forEach(p => {
+          const pos = transformPoint(p.x, p.y);
+          const rot = transformRotation(p.rotation || 0);
+          c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${p.w}, h: ${p.h}${rot ? `, rotation: ${rot}` : ''} },   // Pin ${p.pin}\n`;
+        });
+
       bottomTraces.forEach(t => { t.segments.forEach(s => {
         const p1 = transformPoint(s.x1, s.y1);
         const p2 = transformPoint(s.x2, s.y2);
@@ -646,7 +713,7 @@ function AdapterEditor() {
     c += `    outline: { width: ${roundTo((widthPins - 1) * GRID + 2, 1)}, height: ${roundTo((heightPins - 1) * GRID + 2, 1)} },\n`;
     c += `    outlineOffset: { x: 0, y: 0 },\n    widthPins: ${widthPins},\n    heightPins: ${heightPins},\n  },`;
     return c;
-  }, [adapter, maskExpansion, bottomTraces, vias, transformPoint, transformRotation]);
+  }, [adapter, maskExpansion, bottomPads, bottomTraces, vias, transformPoint, transformRotation]);
 
   const gridDots = [];
   for (let c = 0; c < adapter.widthPins; c++)
@@ -768,6 +835,7 @@ function AdapterEditor() {
                 silkLines: rotated.silkLines,
                 silkText: rotated.silkText,
               }));
+              setBottomPads(rotated.bottomPads || []);
               setBottomTraces(rotated.bottomTraces);
               setVias(rotated.vias);
               setShowImport(false);
@@ -781,9 +849,9 @@ function AdapterEditor() {
         // Export
         React.createElement("button", { onClick: () => setShowCode(!showCode), style: { ...btnStyle, background: COLORS.accent, color: "#fff", padding: "6px 8px", fontSize: 11 } }, showCode ? "Hide Code" : "📋 Export JS Code"),
 
-        // Layer toggle
-        (bottomTraces.length > 0 || vias.length > 0) && React.createElement("fieldset", { style: { border: `1px solid ${COLORS.panelBorder}`, padding: 8, borderRadius: 4 } },
-          React.createElement("legend", { style: { color: COLORS.textDim, fontSize: 10 } }, `LAYERS (B.Cu: ${bottomTraces.length} traces, ${vias.length} vias)`),
+        // Layer toggle        
+        (bottomPads.length > 0 || bottomTraces.length > 0 || vias.length > 0) && React.createElement("fieldset", { style: { border: `1px solid ${COLORS.panelBorder}`, padding: 8, borderRadius: 4 } },
+          React.createElement("legend", { style: { color: COLORS.textDim, fontSize: 10 } }, `LAYERS (B.Cu: ${bottomPads.length} pads, ${bottomTraces.length} traces, ${vias.length} vias)`),
           React.createElement("div", { style: { display: "flex", gap: 4 } },
             ["both", "F.Cu", "B.Cu"].map(l =>
               React.createElement("button", { key: l, onClick: () => setShowLayer(l), style: { ...btnStyle, background: showLayer === l ? (l === "B.Cu" ? "#2060c0" : l === "F.Cu" ? COLORS.accent : "#606") : COLORS.btnBg, fontSize: 10 } }, l)
@@ -817,7 +885,7 @@ function AdapterEditor() {
             `World: (${mousePos.world.x.toFixed(3)}, ${mousePos.world.y.toFixed(3)})`, React.createElement("br"),
             `Snap: (${mousePos.snapped.x.toFixed(3)}, ${mousePos.snapped.y.toFixed(3)})`, React.createElement("br"),
           ),
-          `Pads: ${adapter.smdPads.length} | F.Cu: ${adapter.traces.length} | B.Cu: ${bottomTraces.length} | Vias: ${vias.length} | TH: ${adapter.throughPins.length}`,
+          `Pads: ${adapter.smdPads.length} | F.Cu: ${adapter.traces.length} | B.Cu pads: ${bottomPads.length} | B.Cu traces: ${bottomTraces.length} | Vias: ${vias.length} | TH: ${adapter.throughPins.length}`,
         ),
       ),
 
@@ -918,6 +986,17 @@ function AdapterEditor() {
               })
             )
           ),
+
+          // Pads (B.Cu - bottom)
+          (showLayer === "B.Cu" || showLayer === "both") && bottomPads.map((p, i) => {
+            const tp = transformPoint(p.x, p.y);
+            const { sx, sy } = toScreen(tp.x, tp.y);
+            const w = p.w * pxPerMm, h = p.h * pxPerMm;
+            const rot = transformRotation(p.rotation || 0);
+            return React.createElement("g", { key: `bp${i}`, transform: rot ? `rotate(${-rot}, ${sx}, ${sy})` : undefined },
+              React.createElement("rect", { x: sx - w / 2, y: sy - h / 2, width: w, height: h, fill: "#4060d8", stroke: "#80a0ff", strokeWidth: 0.8, opacity: showLayer === "both" ? 0.55 : 0.9, rx: 1 }),
+            );
+          }),
 
           // Traces (B.Cu - bottom)
           (showLayer === "B.Cu" || showLayer === "both") && bottomTraces.map((t, ti) =>
