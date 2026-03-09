@@ -30,8 +30,32 @@
 
 /** Base path for module overlay PNGs. Override for WordPress deployment. */
 export let adapterOverlayBasePath = './assets/adapters';
+export const VARIABLE_SUBGRID_ADAPTER_ID = 'subgrid-variable';
 
 export const ADAPTER_LIBRARY = [
+    {
+      id: VARIABLE_SUBGRID_ADAPTER_ID,
+      name: 'Variable Sub-Grid Adapter (2.00 mm / 1.27 mm)',
+      category: 'SMD Pads',
+      pitch: 2.54,
+      color: '#606060',
+      throughPins: [],
+      features: {
+        copper: [],
+        copperBack: [],
+        mask: [],
+        silk: [],
+        silkText: [],
+        drills: [],
+      },
+      outline: { width: 9.2, height: 9.2 },
+      outlineOffset: { x: 0, y: 0 },
+      widthPins: 4,
+      heightPins: 4,
+      isResizable: true,
+      subGridPitches: [2.0, 1.27],
+    },
+
     {
       id: 'rail-bridge',
       name: 'Powerrail-Bridge',
@@ -1706,6 +1730,34 @@ export const ADAPTER_LIBRARY = [
  */
 export function getAdapter(adapterId) {
   return ADAPTER_LIBRARY.find(a => a.id === adapterId) || null;
+}
+
+export function getAdapterForInstance(inst) {
+  const adapter = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+  if (!adapter) return null;
+
+  if (adapter.id !== VARIABLE_SUBGRID_ADAPTER_ID) return adapter;
+
+  const widthPins = Math.max(1, Math.round(inst.widthPins || adapter.widthPins || 4));
+  const heightPins = Math.max(1, Math.round(inst.heightPins || adapter.heightPins || 4));
+
+  return {
+    ...adapter,
+    widthPins,
+    heightPins,
+    outline: {
+      width: Math.max(2.5, (widthPins - 1) * adapter.pitch + 1.6),
+      height: Math.max(2.5, (heightPins - 1) * adapter.pitch + 1.6),
+    },
+    features: {
+      copper: [],
+      copperBack: [],
+      mask: [],
+      silk: [],
+      silkText: [],
+      drills: [],
+    },
+  };
 }
 
 /**

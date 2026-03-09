@@ -4,7 +4,7 @@
   import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
-  import { getRotatedAdapter } from './lib/adapters.js';
+  import { getAdapterForInstance } from './lib/adapters.js';
   import { parseProject, serializeProject } from './lib/projectFile.js';
 
   const defaultConfig = {
@@ -43,7 +43,7 @@
 
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
-    _adapterDef: getRotatedAdapter(inst.adapterId, inst.rotation || 0),
+    _adapterDef: getAdapterForInstance(inst),
   })));
 
   function onSelect(id) {
