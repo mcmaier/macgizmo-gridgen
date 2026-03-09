@@ -36,9 +36,9 @@ const DEFAULT_ADAPTER = {
 function parseKicadMod(text) {
   const pads = [], silkLines = [];
   let bodyPoly = null, m;
-  const padRegex = /\(pad\s+"(\d+)"\s+smd\s+\w+\s*\n?\s*\(at\s+([-\d.]+)\s+([-\d.]+)\)\s*\n?\s*\(size\s+([-\d.]+)\s+([-\d.]+)\)/g;
+  const padRegex = /\(pad\s+"(\d+)"\s+smd\s+\w+\s*\n?\s*\(at\s+([-\d.]+)\s+([-\d.]+)(?:\s+([-\d.]+))?\)\s*\n?\s*\(size\s+([-\d.]+)\s+([-\d.]+)\)/g;
   while ((m = padRegex.exec(text)) !== null) {
-    pads.push({ pin: parseInt(m[1]), x: parseFloat(m[2]), y: parseFloat(m[3]), w: parseFloat(m[4]), h: parseFloat(m[5]) });
+    pads.push({ pin: parseInt(m[1]), x: parseFloat(m[2]), y: parseFloat(m[3]), rotation: parseFloat(m[4] || 0), w: parseFloat(m[5]), h: parseFloat(m[6]) });
   }
   const fabPolyRegex = /\(fp_poly\s*\n?\s*\(pts\s*\n?\s*([\s\S]*?)\)[\s\S]*?\(layer\s+"F\.Fab"\)/;
   const polyMatch = fabPolyRegex.exec(text);
@@ -49,65 +49,6 @@ function parseKicadMod(text) {
     if (points.length > 2) bodyPoly = points;
   }
   return { pads, silkLines, bodyPoly };
-}
-
-/**
- * Parse RS-274X Gerber file. Extracts flashed pads and drawn traces.
- * Returns { pads: [{x, y, w, h, shape}], traces: [{x1, y1, x2, y2, w}] }
- */
-
-/**
- * Parse RS-274X Gerber file. Extracts flashed pads and drawn traces.
- */
-function parseGerber(text) {
-  const apertures = {};
-  const pads = [];
-  const traces = [];
-  let unitMul = 1, fmtDecX = 4, fmtDecY = 4;
-  const rawLines = text.replace(/\r/g, "").split("\n");
-  for (let line of rawLines) {
-    line = line.trim();
-    if (!line) continue;
-    let m = line.match(/%FSLA?X(\d)(\d)Y(\d)(\d)\*%/);
-    if (m) { fmtDecX = parseInt(m[2]); fmtDecY = parseInt(m[4]); continue; }
-    if (line.includes("%MOMM*%")) { unitMul = 1; continue; }
-    if (line.includes("%MOIN*%")) { unitMul = 25.4; continue; }
-    m = line.match(/%ADD(\d+)([A-Z]),?([\d.]+)?(?:X([\d.]+))?\*%/);
-    if (m) {
-      const dc = parseInt(m[1]), shape = m[2];
-      const p1 = parseFloat(m[3] || 0) * unitMul;
-      const p2 = m[4] ? parseFloat(m[4]) * unitMul : p1;
-      if (shape === "C") apertures[dc] = { shape: "circle", d: p1 };
-      else if (shape === "R") apertures[dc] = { shape: "rect", w: p1, h: p2 };
-      else if (shape === "O") apertures[dc] = { shape: "oblong", w: p1, h: p2 };
-      continue;
-    }
-    if (line.startsWith("%") || line.startsWith("G04")) continue;
-  }
-  let curX = 0, curY = 0, prevX = 0, prevY = 0, curAp = null;
-  for (let line of rawLines) {
-    line = line.trim();
-    if (!line || line.startsWith("%") || line.startsWith("G04") || line === "M02*") continue;
-    let m = line.match(/^D(\d+)\*$/);
-    if (m) { curAp = parseInt(m[1]); continue; }
-    m = line.match(/^(?:X([-+]?\d+))?(?:Y([-+]?\d+))?D0([123])\*$/);
-    if (!m) continue;
-    prevX = curX; prevY = curY;
-    if (m[1] !== undefined) curX = (parseInt(m[1]) / Math.pow(10, fmtDecX)) * unitMul;
-    if (m[2] !== undefined) curY = (parseInt(m[2]) / Math.pow(10, fmtDecY)) * unitMul;
-    const op = parseInt(m[3]);
-    const ap = apertures[curAp] || {};
-    if (op === 3) {
-      if (ap.shape === "rect" || ap.shape === "oblong")
-        pads.push({ x: roundTo(curX,4), y: roundTo(curY,4), w: roundTo(ap.w,4), h: roundTo(ap.h,4) });
-      else if (ap.shape === "circle")
-        pads.push({ x: roundTo(curX,4), y: roundTo(curY,4), w: roundTo(ap.d,4), h: roundTo(ap.d,4) });
-    } else if (op === 1) {
-      const w = ap.shape === "circle" ? ap.d : (ap.w || 0.15);
-      traces.push({ x1: roundTo(prevX,4), y1: roundTo(prevY,4), x2: roundTo(curX,4), y2: roundTo(curY,4), w: roundTo(w,4) });
-    }
-  }
-  return { pads, traces };
 }
 
 /**
@@ -337,6 +278,69 @@ function parseKicadPcb(text) {
   };
 }
 
+  function rotatePointAroundOrigin(point, rotationDeg) {
+    const rad = rotationDeg * Math.PI / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+    return {
+      x: roundTo(point.x * cosR - point.y * sinR, 4),
+      y: roundTo(point.x * sinR + point.y * cosR, 4),
+    };
+  }
+
+  function rotateTraceSegments(segments, rotationDeg) {
+    return segments.map(seg => {
+      const p1 = rotatePointAroundOrigin({ x: seg.x1, y: seg.y1 }, rotationDeg);
+      const p2 = rotatePointAroundOrigin({ x: seg.x2, y: seg.y2 }, rotationDeg);
+      return { ...seg, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+    });
+  }
+
+  function normalizeRotation(rotationDeg) {
+    return roundTo(((rotationDeg % 360) + 360) % 360, 1);
+  }
+
+  function applyFootprintRotationToImport(imported, rotationDeg) {
+    if (!rotationDeg) return imported;
+
+    const rotateWithPadRotation = (pad) => {
+      const point = rotatePointAroundOrigin({ x: pad.x, y: pad.y }, rotationDeg);
+      const originalRotation = pad.rotation || 0;
+      return {
+        ...pad,
+        x: point.x,
+        y: point.y,
+        rotation: normalizeRotation(originalRotation + rotationDeg),
+      };
+    };
+
+    return {
+      ...imported,
+      smdPads: (imported.smdPads || []).map(rotateWithPadRotation),
+      topTraces: (imported.topTraces || []).map(t => ({ ...t, segments: rotateTraceSegments(t.segments || [], rotationDeg) })),
+      bottomTraces: (imported.bottomTraces || []).map(t => ({ ...t, segments: rotateTraceSegments(t.segments || [], rotationDeg) })),
+      vias: (imported.vias || []).map(v => {
+        const point = rotatePointAroundOrigin({ x: v.x, y: v.y }, rotationDeg);
+        return { ...v, x: point.x, y: point.y };
+      }),
+      silkBody: imported.silkBody ? imported.silkBody.map(p => rotatePointAroundOrigin(p, rotationDeg)) : imported.silkBody,
+      silkLines: (imported.silkLines || []).map(s => {
+        const p1 = rotatePointAroundOrigin({ x: s.x1, y: s.y1 }, rotationDeg);
+        const p2 = rotatePointAroundOrigin({ x: s.x2, y: s.y2 }, rotationDeg);
+        return { ...s, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+      }),
+      silkText: (imported.silkText || []).map(t => {
+        const point = rotatePointAroundOrigin({ x: t.x, y: t.y }, rotationDeg);
+        return {
+          ...t,
+          x: point.x,
+          y: point.y,
+          rotation: normalizeRotation((t.rotation || 0) + rotationDeg),
+        };
+      }),
+    };
+  }
+
 /**
  * Convert parsed KiCad PCB data to adapter editor format.
  * KiCad Y-down is flipped to editor Y-up.
@@ -519,9 +523,19 @@ function AdapterEditor() {
   const doImport = () => {
     const parsed = parseKicadMod(importText);
     if (parsed.pads.length === 0) return;
-    const pads = parsed.pads.map(p => ({ pin: p.pin, x: roundTo(p.x, 3), y: roundTo(-p.y, 3), w: roundTo(p.w, 3), h: roundTo(p.h, 3) }));
-    const body = parsed.bodyPoly ? parsed.bodyPoly.map(p => ({ x: roundTo(p.x, 3), y: roundTo(-p.y, 3) })) : null;
-    setAdapter(a => ({ ...a, smdPads: pads, silkBody: body, silkLines: [], silkText: [], traces: [] }));
+    const imported = {
+      smdPads: parsed.pads.map(p => ({ pin: p.pin, x: roundTo(p.x, 3), y: roundTo(-p.y, 3), rotation: p.rotation ? roundTo(-p.rotation, 1) : 0, w: roundTo(p.w, 3), h: roundTo(p.h, 3) })),
+      silkBody: parsed.bodyPoly ? parsed.bodyPoly.map(p => ({ x: roundTo(p.x, 3), y: roundTo(-p.y, 3) })) : null,
+      silkLines: [],
+      silkText: [],
+      topTraces: [],
+      bottomTraces: [],
+      vias: [],
+    };
+    const rotated = applyFootprintRotationToImport(imported, adapter.originOffset.rot || 0);
+    setAdapter(a => ({ ...a, smdPads: rotated.smdPads, silkBody: rotated.silkBody, silkLines: rotated.silkLines, silkText: rotated.silkText, traces: rotated.topTraces }));
+    setBottomTraces(rotated.bottomTraces);
+    setVias(rotated.vias);
     setShowImport(false);
   };
 
@@ -533,52 +547,98 @@ function AdapterEditor() {
     reader.readAsText(file);
   };
 
+  const transformPoint = useCallback((x, y) => {
+    const rot = adapter.originOffset.rot || 0;
+    const ox = adapter.originOffset.x || 0;
+    const oy = adapter.originOffset.y || 0;
+    if (!rot) return { x: x + ox, y: y + oy };
+    const rad = rot * Math.PI / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+    return {
+      x: x * cosR - y * sinR + ox,
+      y: x * sinR + y * cosR + oy,
+    };
+  }, [adapter.originOffset.rot, adapter.originOffset.x, adapter.originOffset.y]);
+
+  const transformRotation = useCallback((rot = 0) => {
+    const out = roundTo((rot || 0) + (adapter.originOffset.rot || 0), 2);
+    return Math.abs(out) < 0.01 ? 0 : out;
+  }, [adapter.originOffset.rot]);
+
   const generateCode = useMemo(() => {
     const { id, name, category, widthPins, heightPins, smdPads, traces, throughPins, originOffset, silkBody, silkLines, silkText } = adapter;
-    const ox = originOffset.x, oy = originOffset.y;
     let c = `  {\n    id: '${id}',\n    name: '${name}',\n    category: '${category}',\n    pitch: 2.54,\n    color: '#a060c0',\n\n`;
     c += `    throughPins: [\n`;
     throughPins.forEach(tp => { c += `      { col: ${tp.col}, row: ${tp.row}, label: '${tp.label}' },\n`; });
     c += `    ],\n\n    features: {\n      copper: [\n        // SMD pads\n`;
-    smdPads.forEach(p => { const rot = p.rotation ? `, rotation: ${p.rotation}` : ''; c += `        { type: 'pad', x: ${roundTo(p.x + ox, 4)}, y: ${roundTo(p.y + oy, 4)}, w: ${p.w}, h: ${p.h}${rot} },   // Pin ${p.pin}\n`; });
+    smdPads.forEach(p => {
+      const pos = transformPoint(p.x, p.y);
+      const rot = transformRotation(p.rotation || 0);
+      c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${p.w}, h: ${p.h}${rot ? `, rotation: ${rot}` : ''} },   // Pin ${p.pin}\n`;
+    });
     c += `\n        // F.Cu traces\n`;
-    traces.forEach(t => { t.segments.forEach(s => { c += `        { type: 'trace', x1: ${roundTo(s.x1 + ox, 4)}, y1: ${roundTo(s.y1 + oy, 4)}, x2: ${roundTo(s.x2 + ox, 4)}, y2: ${roundTo(s.y2 + oy, 4)}, w: ${s.w} },\n`; }); });
+    traces.forEach(t => { t.segments.forEach(s => {
+      const p1 = transformPoint(s.x1, s.y1);
+      const p2 = transformPoint(s.x2, s.y2);
+      c += `        { type: 'trace', x1: ${roundTo(p1.x, 4)}, y1: ${roundTo(p1.y, 4)}, x2: ${roundTo(p2.x, 4)}, y2: ${roundTo(p2.y, 4)}, w: ${s.w} },\n`;}); 
+    });
     c += `      ],\n`;
 
     // B.Cu (copperBack)
     if (bottomTraces.length > 0) {
       c += `      copperBack: [\n`;
-      bottomTraces.forEach(t => { t.segments.forEach(s => { c += `        { type: 'trace', x1: ${roundTo(s.x1 + ox, 4)}, y1: ${roundTo(s.y1 + oy, 4)}, x2: ${roundTo(s.x2 + ox, 4)}, y2: ${roundTo(s.y2 +oy, 4)}, w: ${s.w} },\n`; }); });
+      bottomTraces.forEach(t => { t.segments.forEach(s => {
+        const p1 = transformPoint(s.x1, s.y1);
+        const p2 = transformPoint(s.x2, s.y2);
+        c += `        { type: 'trace', x1: ${roundTo(p1.x, 4)}, y1: ${roundTo(p1.y, 4)}, x2: ${roundTo(p2.x, 4)}, y2: ${roundTo(p2.y, 4)}, w: ${s.w} },\n`;});
+       });
       c += `      ],\n`;
     }
 
     // Vias (drills)
     if (vias.length > 0) {
       c += `      drills: [\n`;
-      vias.forEach(v => { c += `        { x: ${roundTo(v.x + ox, 4)}, y: ${roundTo(v.y + oy, 4)}, drill: ${v.drill}, size: ${v.size} },\n`; });
+      vias.forEach(v => {
+        const p = transformPoint(v.x, v.y);
+        c += `        { x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)}, drill: ${v.drill}, size: ${v.size} },\n`;
+      });
       c += `      ],\n`;
     }
 
     c += `      mask: [\n`;
-    smdPads.forEach(p => { const rot = p.rotation ? `, rotation: ${p.rotation}` : ''; c += `        { type: 'pad', x: ${roundTo(p.x + ox, 4)}, y: ${roundTo(p.y + oy, 4)}, w: ${roundTo(p.w + maskExpansion * 2, 4)}, h: ${roundTo(p.h + maskExpansion * 2, 4)}${rot} },\n`; });
+        smdPads.forEach(p => {
+      const pos = transformPoint(p.x, p.y);
+      const rot = transformRotation(p.rotation || 0);
+      c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${roundTo(p.w + maskExpansion * 2, 4)}, h: ${roundTo(p.h + maskExpansion * 2, 4)}${rot ? `, rotation: ${rot}` : ''} },\n`;
+    });
     c += `      ],\n      silk: [\n`;
     if (silkBody && silkBody.length > 2) {
       c += `        { type: 'poly', points: [\n`;
-      silkBody.forEach(pt => { c += `          { x: ${roundTo(pt.x + ox, 4)}, y: ${roundTo(pt.y + oy, 4)} },\n`; });
+      silkBody.forEach(pt => {
+        const p = transformPoint(pt.x, pt.y);
+        c += `          { x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)} },\n`;
+      });
+      const p0 = transformPoint(silkBody[0].x, silkBody[0].y);
+      c += `          { x: ${roundTo(p0.x, 4)}, y: ${roundTo(p0.y, 4)} },\n        ]},\n`;
       c += `          { x: ${roundTo(silkBody[0].x + ox, 4)}, y: ${roundTo(silkBody[0].y + oy, 4)} },\n        ]},\n`;
     }
     silkLines.forEach(s => {
-      c += `        { type: 'poly', points: [{ x: ${roundTo(s.x1 + ox, 4)}, y: ${roundTo(s.y1 + oy, 4)} }, { x: ${roundTo(s.x2 + ox, 4)}, y: ${roundTo(s.y2 + oy, 4)} }] },\n`;
+            const p1 = transformPoint(s.x1, s.y1);
+      const p2 = transformPoint(s.x2, s.y2);
+      c += `        { type: 'poly', points: [{ x: ${roundTo(p1.x, 4)}, y: ${roundTo(p1.y, 4)} }, { x: ${roundTo(p2.x, 4)}, y: ${roundTo(p2.y, 4)} }] },\n`;
     });
     if (smdPads.length > 0) {
       const p1 = smdPads[0];
-      c += `        { type: 'circle', x: ${roundTo(p1.x + ox - 0.3, 4)}, y: ${roundTo(p1.y + oy + 0.5, 4)}, d: 0.25 },\n`;
+      const marker = transformPoint(p1.x - 0.3, p1.y + 0.5);
+      c += `        { type: 'circle', x: ${roundTo(marker.x, 4)}, y: ${roundTo(marker.y, 4)}, d: 0.25 },\n`;
     }
     c += `      ],\n`;
     if (silkText.length > 0) {
       c += `      silkText: [\n`;
       silkText.forEach(t => {
-        c += `        { type: 'text', text: '${t.text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}', x: ${roundTo(t.x + ox, 4)}, y: ${roundTo(t.y + oy, 4)}, height: ${t.height || 1}, rotation: ${t.rotation || 0} },\n`;
+                const p = transformPoint(t.x, t.y);
+        c += `        { type: 'text', text: '${t.text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}', x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)}, height: ${t.height || 1}, rotation: ${transformRotation(t.rotation || 0)} },\n`;
       });
       c += `      ],\n`;
     }
@@ -586,7 +646,7 @@ function AdapterEditor() {
     c += `    outline: { width: ${roundTo((widthPins - 1) * GRID + 2, 1)}, height: ${roundTo((heightPins - 1) * GRID + 2, 1)} },\n`;
     c += `    outlineOffset: { x: 0, y: 0 },\n    widthPins: ${widthPins},\n    heightPins: ${heightPins},\n  },`;
     return c;
-  }, [adapter, maskExpansion, bottomTraces, vias]);
+  }, [adapter, maskExpansion, bottomTraces, vias, transformPoint, transformRotation]);
 
   const gridDots = [];
   for (let c = 0; c < adapter.widthPins; c++)
@@ -632,9 +692,19 @@ function AdapterEditor() {
             React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Y"),
             React.createElement("input", { type: "number", step: 0.01, value: adapter.originOffset.y, onChange: e => setAdapter(a => ({ ...a, originOffset: { ...a.originOffset, y: parseFloat(e.target.value) || 0 } })), style: { ...inputStyle, width: 64 } }),
           ),
+          React.createElement("div", { style: { marginTop: 4,  fontSize: 10, color: COLORS.textDim } }, "Set rotation before import or import again, to recalculate positions"),
           React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 8 } },
             React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "R"),
-            React.createElement("input", { type: "number", step: 1, value: adapter.originOffset.rot, onChange: e => setAdapter(a => ({ ...a, originOffset: { ...a.originOffset, rot: parseFloat(e.target.value) || 0 } })), style: { ...inputStyle, width: 64 } }),            
+            React.createElement("input", {
+              type: "number",
+              step: 1,
+              value: adapter.originOffset.rot ?? 0,
+              onChange: e => setAdapter(a => {
+                const rot = parseFloat(e.target.value);
+                return { ...a, originOffset: { ...a.originOffset, rot: Number.isFinite(rot) ? rot : 0 } };
+              }),
+              style: { ...inputStyle, width: 64 }
+            }),
           ),
         ),
 
@@ -680,35 +750,26 @@ function AdapterEditor() {
           React.createElement("textarea", { value: importText, onChange: e => setImportText(e.target.value), placeholder: "...or paste file content", rows: 4, style: { ...inputStyle, fontSize: 10, resize: "vertical" } }),
           React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
             React.createElement("button", { onClick: doImport, style: { ...btnStyle, background: COLORS.accent, color: "#fff" } }, "KiCad Mod"),
-            /*React.createElement("button", { onClick: () => {
-              const parsed = parseGerber(importText);
-              if (parsed.pads.length === 0 && parsed.traces.length === 0) { alert("No features in Gerber"); return; }
-              let minX = Infinity, minY = Infinity;
-              for (const p of parsed.pads) { minX = Math.min(minX, p.x-p.w/2); minY = Math.min(minY, p.y-p.h/2); }
-              for (const t of parsed.traces) { minX = Math.min(minX, t.x1, t.x2); minY = Math.min(minY, t.y1, t.y2); }
-              const pads = parsed.pads.map((p,i) => ({ pin: i+1, x: roundTo(p.x-minX,4), y: roundTo(p.y-minY,4), w: p.w, h: p.h }));
-              const traces = parsed.traces.map(t => ({ segments: [{ x1: roundTo(t.x1-minX,4), y1: roundTo(t.y1-minY,4), x2: roundTo(t.x2-minX,4), y2: roundTo(t.y2-minY,4), w: t.w }] }));
-              setAdapter(a => ({ ...a, smdPads: pads, traces: [...a.traces, ...traces], silkLines: [], silkText: [] }));
-              setShowImport(false);
-            }, style: { ...btnStyle, background: "#40a060", color: "#fff" } }, "Gerber"),*/
-            React.createElement("button", { onClick: () => {
+            React.createElement("button", { onClick: () => {400
               const parsed = parseKicadPcb(importText);
               if (parsed.error) { alert(parsed.error); return; }
               const result = kicadPcbToAdapter(parsed);
               if (!result) { alert("Parse failed"); return; }
+              const rotated = applyFootprintRotationToImport(result, adapter.originOffset.rot || 0);
+
               // Auto-set grid size from board dimensions
               const gridW = Math.round(result.boardW / GRID) + 1;
               const gridH = Math.round(result.boardH / GRID) + 1;
               setAdapter(a => ({
                 ...a,
                 widthPins: gridW, heightPins: gridH,
-                smdPads: result.smdPads,
-                traces: result.topTraces,
-                silkLines: result.silkLines,
-                silkText: result.silkText,
+                smdPads: rotated.smdPads,
+                traces: rotated.topTraces,
+                silkLines: rotated.silkLines,
+                silkText: rotated.silkText,
               }));
-              setBottomTraces(result.bottomTraces);
-              setVias(result.vias);
+              setBottomTraces(rotated.bottomTraces);
+              setVias(rotated.vias);
               setShowImport(false);
             }, style: { ...btnStyle, background: "#4080d0", color: "#fff" } }, "KiCad PCB"),
           ),
@@ -746,7 +807,7 @@ function AdapterEditor() {
             `Size: ${adapter.smdPads[selectedPad].w} × ${adapter.smdPads[selectedPad].h} mm`,
             adapter.smdPads[selectedPad].rotation ? [React.createElement("br"), `Rotation: ${adapter.smdPads[selectedPad].rotation}°`] : null,
             React.createElement("br"),
-            `Export: (${roundTo(adapter.smdPads[selectedPad].x + adapter.originOffset.x, 4)}, ${roundTo(adapter.smdPads[selectedPad].y + adapter.originOffset.y, 4)})`,
+            (() => { const ep = transformPoint(adapter.smdPads[selectedPad].x, adapter.smdPads[selectedPad].y); return `Export: (${roundTo(ep.x, 4)}, ${roundTo(ep.y, 4)})`; })(),
           ),
         ),
 
@@ -824,9 +885,12 @@ function AdapterEditor() {
 
           // SMD Pads
           adapter.smdPads.map((p, i) => {
-            const { sx, sy } = toScreen(p.x + adapter.originOffset.x, p.y + adapter.originOffset.y);
+            const tp = transformPoint(p.x, p.y);
+            const {sx, sy} = toScreen(tp.x, tp.y);
+
+            //const { sx, sy } = toScreen(p.x + adapter.originOffset.x, p.y + adapter.originOffset.y);
             const w = p.w * pxPerMm, h = p.h * pxPerMm;
-            const rot = p.rotation || 0;
+            const rot = transformRotation(p.rotation || 0);
             return React.createElement("g", { key: `p${i}`, transform: rot ? `rotate(${-rot}, ${sx}, ${sy})` : undefined },
               React.createElement("rect", { x: sx - w / 2, y: sy - h / 2, width: w, height: h, fill: COLORS.smdPad, stroke: selectedPad === i ? COLORS.highlight : COLORS.smdPadStroke, strokeWidth: selectedPad === i ? 2 : 0.5, rx: 1 }),
               React.createElement("text", { x: sx, y: sy + 0.15 * pxPerMm, textAnchor: "middle", fill: "#000", fontSize: Math.min(0.35 * pxPerMm, 11), fontFamily: "monospace", fontWeight: "bold", style: { pointerEvents: "none" }, transform: rot ? `rotate(${rot}, ${sx}, ${sy})` : undefined }, p.pin),
@@ -839,14 +903,10 @@ function AdapterEditor() {
           (showLayer === "F.Cu" || showLayer === "both") && adapter.traces.map((t, ti) =>
             React.createElement("g", { key: `t${ti}` },
               t.segments.map((s, si) => {
-                const p1 = toScreen(
-                  s.x1 + adapter.originOffset.x,
-                  s.y1 + adapter.originOffset.y
-                );
-                const p2 = toScreen(
-                  s.x2 + adapter.originOffset.x,
-                  s.y2 + adapter.originOffset.y
-                );
+                const t1 = transformPoint(s.x1, s.y1);
+                const t2 = transformPoint(s.x2, s.y2);
+                const p1 = toScreen(t1.x, t1.y);
+                const p2 = toScreen(t2.x, t2.y);
                 return React.createElement("line", {
                   key: si,
                   x1: p1.sx, y1: p1.sy,
@@ -863,14 +923,10 @@ function AdapterEditor() {
           (showLayer === "B.Cu" || showLayer === "both") && bottomTraces.map((t, ti) =>
             React.createElement("g", { key: `bt${ti}` },
               t.segments.map((s, si) => {
-                const p1 = toScreen(
-                  s.x1 + adapter.originOffset.x,
-                  s.y1 + adapter.originOffset.y
-                );
-                const p2 = toScreen(
-                  s.x2 + adapter.originOffset.x,
-                  s.y2 + adapter.originOffset.y
-                );
+                const t1 = transformPoint(s.x1, s.y1);
+                const t2 = transformPoint(s.x2, s.y2);
+                const p1 = toScreen(t1.x, t1.y);
+                const p2 = toScreen(t2.x, t2.y);
                 return React.createElement("line", {
                   key: si,
                   x1: p1.sx, y1: p1.sy,
@@ -886,10 +942,8 @@ function AdapterEditor() {
 
           // Vias
           vias.map((v, vi) => {
-            const s = toScreen(
-              v.x + adapter.originOffset.x,
-              v.y + adapter.originOffset.y
-            );
+            const tv = transformPoint(v.x, v.y);
+            const s = toScreen(tv.x, tv.y);
             const outerR = (v.size / 2) * pxPerMm;
             const innerR = (v.drill / 2) * pxPerMm;
 
@@ -913,8 +967,10 @@ function AdapterEditor() {
 
           // Silkscreen lines
           adapter.silkLines.map((s, si) => {
-            const p1 = toScreen(s.x1 + adapter.originOffset.x, s.y1 + adapter.originOffset.y);
-            const p2 = toScreen(s.x2 + adapter.originOffset.x, s.y2 + adapter.originOffset.y);
+            const t1 = transformPoint(s.x1, s.y1);
+            const t2 = transformPoint(s.x2, s.y2);
+            const p1 = toScreen(t1.x, t1.y);
+            const p2 = toScreen(t2.x, t2.y);
             return React.createElement("line", {
               key: `sl${si}`,
               x1: p1.sx,
@@ -929,9 +985,10 @@ function AdapterEditor() {
 
           // Silkscreen reference text preview
           adapter.silkText.map((t, ti) => {
-            const s = toScreen(t.x + adapter.originOffset.x, t.y + adapter.originOffset.y);
+            const tt = transformPoint(t.x, t.y);
+            const s = toScreen(tt.x, tt.y);
             const fontPx = Math.max((t.height || 1) * pxPerMm, 9);
-            const rotation = t.rotation || 0;
+            const rotation = transformRotation(t.rotation || 0);
             return React.createElement("text", {
               key: `st${ti}`,
               x: s.sx,
