@@ -1,6 +1,6 @@
 <script>
   import { MODULE_LIBRARY } from '../lib/modules.js';
-  import { ADAPTER_LIBRARY } from '../lib/adapters.js';
+  import { ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID } from '../lib/adapters.js';
 
   let { modules = $bindable(), adapters = $bindable(), config, selectedInstanceId, onSelect, showModuleOverlays = $bindable(), showAdapterOverlays = $bindable() } = $props();
   let selectedModuleId = $state('');
@@ -96,14 +96,19 @@ function addModule() {
     const def = ADAPTER_LIBRARY.find(a => a.id === selectedAdapterId);
     if (!def) return;
     const { cols, rows } = getGridSize();
+    const isVariableSubGrid = def.id === VARIABLE_SUBGRID_ADAPTER_ID;
+    const widthPins = isVariableSubGrid ? 4 : def.widthPins;
+    const heightPins = isVariableSubGrid ? 4 : def.heightPins;
+
     adapters = [...adapters, {
       id: crypto.randomUUID(),
       adapterId: selectedAdapterId,
       name: def.name,
-      col: Math.max(0, Math.floor((cols - def.widthPins) / 2)),
-      row: Math.max(0, Math.floor((rows - def.heightPins) / 2)),
+      col: Math.max(0, Math.floor((cols - widthPins) / 2)),
+      row: Math.max(0, Math.floor((rows - heightPins) / 2)),
       rotation: 0,
       color: def.color,
+      ...(isVariableSubGrid ? { widthPins, heightPins } : {}),
     }];
   }
 

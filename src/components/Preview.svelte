@@ -1,7 +1,7 @@
 <script>
   import { computeGrid, generatePadPositions, generatePowerRailTraces, generateSignalTraces, computeMountingHoles, generateLabelStrokes, RAIL_TRACE_WIDTH, MOUNT_KEEPOUT_MARGIN, isInKeepout } from '../lib/gerber.js';
   import { getRotatedModule, getModuleOverlayUrl, MODULE_LIBRARY } from '../lib/modules.js';
-  import { getRotatedAdapter, getAdapterOverlayUrl, ADAPTER_LIBRARY } from '../lib/adapters.js';
+  import { getAdapterForInstance, getAdapterOverlayUrl, ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID } from '../lib/adapters.js';
   import { getTextStrokes } from '../lib/font.js';
   
   let { config = $bindable(), modules = $bindable(), adapters = $bindable(), selectedInstanceId, onSelect, signalTrackDrawMode = $bindable(), selectedSignalTrackIndex = null, onSelectSignalTrack, showAdapterOverlays = true , showModuleOverlays = true } = $props();
@@ -17,7 +17,7 @@
   // Resolve adapter definitions with rotation applied
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
-    _adapterDef: getRotatedAdapter(inst.adapterId, inst.rotation || 0),
+    _adapterDef: getAdapterForInstance(inst),
   })));
 
   let pads = $derived(generatePadPositions(fullConfig, resolvedAdapters));
@@ -56,7 +56,7 @@
     const pitch = config.pitch;
 
     for (const inst of adapters) {
-      const def = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+      const def = getAdapterForInstance(inst);
       if (!def) continue;
 
       for (let c = 0; c < def.widthPins; c++) {
@@ -156,7 +156,7 @@
 
     /** Convert adapter grid position to board mm and get its features */
   function adapterToMm(inst) {
-    const def = getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+    const def = getAdapterForInstance(inst);
     if (!def) return null;
     const pitch = config.pitch;
     const x = grid.gridLeft + (inst.col || 0) * pitch;
@@ -229,7 +229,7 @@
     // Clamp adapters to grid bounds
     if (dragging.kind === 'adapter') {
       const inst = adapters.find(a => a.id === dragging.instanceId);
-      const def = inst && getRotatedAdapter(inst.adapterId, inst.rotation || 0);
+      const def = inst && getAdapterForInstance(inst);
       if (def) {
         const { cols, rows } = grid;
         newCol = Math.max(0, Math.min(newCol, cols - def.widthPins));
@@ -250,6 +250,97 @@
           : a
       );
     }
+  }
+
+
+
+  let resizing = $state(null); // { instanceId, corner, startCol, startRow, startWidthPins, startHeightPins, anchorCol, anchorRow, startX, startY }
+
+  function getAdapterMinColAndRow(anchorCol, anchorRow, widthPins, heightPins) {
+    const col = Math.min(anchorCol, anchorCol - (widthPins - 1));
+    const row = Math.min(anchorRow, anchorRow - (heightPins - 1));
+    return { col, row };
+  }
+
+  function onResizeHandlePointerDown(e, inst, corner) {
+    if (trackDrawMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect(inst.id);
+    selectedSignalTrackIndex = null;
+
+    const startWidthPins = Math.max(1, Math.round(inst.widthPins || 4));
+    const startHeightPins = Math.max(1, Math.round(inst.heightPins || 4));
+    const pt = getSvgPoint(e);
+
+    const anchorCol = corner.includes('right') ? inst.col : inst.col + startWidthPins - 1;
+    const anchorRow = corner.includes('top') ? inst.row : inst.row + startHeightPins - 1;
+
+    resizing = {
+      instanceId: inst.id,
+      corner,
+      startCol: inst.col,
+      startRow: inst.row,
+      startWidthPins,
+      startHeightPins,
+      anchorCol,
+      anchorRow,
+      startX: pt.x,
+      startY: pt.y,
+    };
+
+    window.addEventListener('pointermove', onResizePointerMove);
+    window.addEventListener('pointerup', onResizePointerUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+  }
+
+  function onResizePointerMove(e) {
+    if (!resizing) return;
+
+    const pitch = config.pitch;
+    const pt = getSvgPoint(e);
+    const dCols = Math.round((pt.x - resizing.startX) / pitch);
+    const dRows = Math.round((pt.y - resizing.startY) / pitch);
+
+    let widthPins = resizing.startWidthPins + (resizing.corner.includes('right') ? dCols : -dCols);
+    let heightPins = resizing.startHeightPins + (resizing.corner.includes('top') ? dRows : -dRows);
+
+    widthPins = Math.max(1, widthPins);
+    heightPins = Math.max(1, heightPins);
+
+    let { col, row } = getAdapterMinColAndRow(resizing.anchorCol, resizing.anchorRow, widthPins, heightPins);
+
+    const maxWidth = grid.cols;
+    const maxHeight = grid.rows;
+
+    if (col < 0) {
+      widthPins = Math.max(1, widthPins + col);
+      col = 0;
+    }
+    if (row < 0) {
+      heightPins = Math.max(1, heightPins + row);
+      row = 0;
+    }
+
+    if (col + widthPins > maxWidth) {
+      widthPins = Math.max(1, maxWidth - col);
+    }
+    if (row + heightPins > maxHeight) {
+      heightPins = Math.max(1, maxHeight - row);
+    }
+
+    adapters = adapters.map(a =>
+      a.id === resizing.instanceId
+        ? { ...a, col, row, widthPins, heightPins }
+        : a
+    );
+  }
+
+  function onResizePointerUp() {
+    resizing = null;
+    window.removeEventListener('pointermove', onResizePointerMove);
+    window.removeEventListener('pointerup', onResizePointerUp);
+    window.removeEventListener('touchmove', onTouchMove);
   }
 
   function onPointerUp() {
@@ -877,21 +968,36 @@
           {/each}
         {/if}
         
-        <!-- Corner markers at adapter boundary (pointing inward) -->
-        {#each [
-          { col: 0, row: 0, dx: 1, dy: 1 },
-          { col: a.def.widthPins - 1, row: 0, dx: -1, dy: 1 },
-          { col: 0, row: a.def.heightPins - 1, dx: 1, dy: -1 },
-          { col: a.def.widthPins - 1, row: a.def.heightPins - 1, dx: -1, dy: -1 },
-        ] as corner}
-          {@const cx = a.x + corner.col * a.pitch}
-          {@const cy = a.y + corner.row * a.pitch}
-          {@const vx = cx - corner.dx * 1.1}
-          {@const vy = cy - corner.dy * 1.1}
-          <path d="M {vx} {vy} L {vx + corner.dx * 1.3} {vy} M {vx} {vy} L {vx} {vy + corner.dy * 1.3}"
-            stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
-            fill="none" opacity="0.7" />
-        {/each}
+        {#if isSelected}
+          <!-- Corner markers at adapter boundary (pointing inward) -->
+          {#each [
+            { key: 'top-left', col: 0, row: 0, dx: 1, dy: 1 },
+            { key: 'top-right', col: a.def.widthPins - 1, row: 0, dx: -1, dy: 1 },
+            { key: 'bottom-left', col: 0, row: a.def.heightPins - 1, dx: 1, dy: -1 },
+            { key: 'bottom-right', col: a.def.widthPins - 1, row: a.def.heightPins - 1, dx: -1, dy: -1 },
+          ] as corner}
+            {@const cx = a.x + corner.col * a.pitch}
+            {@const cy = a.y + corner.row * a.pitch}
+            {@const vx = cx - corner.dx * 1.1}
+            {@const vy = cy - corner.dy * 1.1}
+            <path d="M {vx} {vy} L {vx + corner.dx * 1.3} {vy} M {vx} {vy} L {vx} {vy + corner.dy * 1.3}"
+              stroke="#e8e8e8" stroke-width="0.15" stroke-linecap="round"
+              fill="none" opacity="0.7" />
+
+            {#if inst.adapterId === VARIABLE_SUBGRID_ADAPTER_ID}
+              <circle
+                cx={cx}
+                cy={cy}
+                r="0.55"
+                fill="#f9e2af"
+                stroke="#1a1a1a"
+                stroke-width="0.18"
+                onpointerdown={(e) => onResizeHandlePointerDown(e, inst, corner.key)}
+                style="cursor: nwse-resize;"
+              />
+            {/if}
+          {/each}
+        {/if}
 
         
         <!-- Adapter PNG overlay -->
