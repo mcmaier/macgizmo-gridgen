@@ -17,7 +17,15 @@
 <script type="text/babel">
 const { useState, useRef, useCallback, useEffect, useMemo } = React;
 
-const GRID = 2.54;
+const BASE_GRID_OPTIONS = [2.54, 2, 1.27];
+const DEFAULT_BASE_GRID = 2.54;
+
+const BASE_PITCH_PROFILES = {
+  2.54: { pitch: 2.54, padSize: 1.6, drillSize: 1.0, defineSuffix: '2_54' },
+  2: { pitch: 2.0, padSize: 1.4, drillSize: 0.9, defineSuffix: '2_00' },
+  1.27: { pitch: 1.27, padSize: 1.0, drillSize: 0.6, defineSuffix: '1_27' },
+};
+
 const COLORS = {
   bg: "#1a1a2e", gridDot: "#334", gridDotTH: "#f08040", gridDotTHInner: "#a04020",
   smdPad: "#e8a030", smdPadStroke: "#c08020", trace: "#40d8d8", tracePreview: "#40d8d880",
@@ -463,6 +471,7 @@ const ZOOM_LEVELS = [6, 8, 10, 14, 18, 24, 32, 40, 50, 60, 70, 80];
 
 function AdapterEditor() {
   const [adapter, setAdapter] = useState(DEFAULT_ADAPTER);
+  const [baseGrid, setBaseGrid] = useState(DEFAULT_BASE_GRID);
   const [zoom, setZoom] = useState(4);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [tool, setTool] = useState("select");
@@ -481,6 +490,7 @@ function AdapterEditor() {
   const [bottomTraces, setBottomTraces] = useState([]);
   const [vias, setVias] = useState([]);
   const [showLayer, setShowLayer] = useState("both"); // "F.Cu", "B.Cu", "both"
+  const [basePitchKey, setBasePitchKey] = useState('2.54');
   const svgRef = useRef(null);
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
@@ -497,10 +507,10 @@ function AdapterEditor() {
   }), [pxPerMm, panOffset]);
 
   const snapWorld = useCallback((wx, wy) => {
-    if (snapToGrid) return { x: roundTo(Math.round(wx / GRID) * GRID, 4), y: roundTo(Math.round(wy / GRID) * GRID, 4) };
+    if (snapToGrid) return { x: roundTo(Math.round(wx / baseGrid) * baseGrid, 4), y: roundTo(Math.round(wy / baseGrid) * baseGrid, 4) };
     if (snapSmall) { const s = 0.127; return { x: roundTo(Math.round(wx / s) * s, 4), y: roundTo(Math.round(wy / s) * s, 4) }; }
     return { x: roundTo(wx, 3), y: roundTo(wy, 3) };
-  }, [snapToGrid, snapSmall]);
+  }, [snapToGrid, snapSmall, baseGrid]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -565,10 +575,10 @@ function AdapterEditor() {
   useEffect(() => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const cx = (adapter.widthPins - 1) * GRID / 2;
-    const cy = (adapter.heightPins - 1) * GRID / 2;
+    const cx = (adapter.widthPins - 1) * baseGrid / 2;
+    const cy = (adapter.heightPins - 1) * baseGrid / 2;
     setPanOffset({ x: rect.width / 2 - cx * pxPerMm, y: rect.height / 2 + cy * pxPerMm });
-  }, [adapter.widthPins, adapter.heightPins, pxPerMm]);
+  }, [adapter.widthPins, adapter.heightPins, pxPerMm, baseGrid]);
 
   const doImport = () => {
     const parsed = parseKicadMod(importText);
@@ -629,7 +639,13 @@ function AdapterEditor() {
 
   const generateCode = useMemo(() => {
     const { id, name, category, widthPins, heightPins, smdPads, traces, throughPins, originOffset, silkBody, silkLines, silkText } = adapter;
-    let c = `  {\n    id: '${id}',\n    name: '${name}',\n    category: '${category}',\n    pitch: 2.54,\n    color: '#a060c0',\n\n`;
+
+    const basePitchProfile = BASE_PITCH_PROFILES[basePitchKey] || BASE_PITCH_PROFILES['2.54'];
+    const defineSuffix = basePitchProfile.defineSuffix;
+    let c = `  // #define IFACE_PIN_PAD_${defineSuffix} ${basePitchProfile.padSize}  // from gridProfiles\n`;
+    c += `  // #define IFACE_PIN_DRILL_${defineSuffix} ${basePitchProfile.drillSize}  // from gridProfiles\n`;
+    c += `  {\n    id: '${id}',\n    name: '${name}',\n    category: '${category}',\n    pitch: ${basePitchProfile.pitch},\n    color: '#a060c0',\n    interfacePinPad: ${basePitchProfile.padSize},\n    interfacePinDrill: ${basePitchProfile.drillSize},\n\n`;
+    
     c += `    throughPins: [\n`;
     throughPins.forEach(tp => { c += `      { col: ${tp.col}, row: ${tp.row}, label: '${tp.label}' },\n`; });
     c += `    ],\n\n    features: {\n      copper: [\n        // SMD pads\n`;
@@ -710,15 +726,15 @@ function AdapterEditor() {
       c += `      ],\n`;
     }
     c += `    },\n\n`;
-    c += `    outline: { width: ${roundTo((widthPins - 1) * GRID + 2, 1)}, height: ${roundTo((heightPins - 1) * GRID + 2, 1)} },\n`;
+    c += `    outline: { width: ${roundTo((widthPins - 1) * baseGrid + 2, 1)}, height: ${roundTo((heightPins - 1) * baseGrid + 2, 1)} },\n`;
     c += `    outlineOffset: { x: 0, y: 0 },\n    widthPins: ${widthPins},\n    heightPins: ${heightPins},\n  },`;
     return c;
-  }, [adapter, maskExpansion, bottomPads, bottomTraces, vias, transformPoint, transformRotation]);
+  }, [adapter, maskExpansion, bottomPads, bottomTraces, vias, transformPoint, transformRotation, baseGrid, basePitchKey]);
 
   const gridDots = [];
   for (let c = 0; c < adapter.widthPins; c++)
     for (let r = 0; r < adapter.heightPins; r++)
-      gridDots.push({ x: c * GRID, y: r * GRID, col: c, row: r });
+      gridDots.push({ x: c * baseGrid, y: r * baseGrid, col: c, row: r });
 
   const inputStyle = { background: COLORS.inputBg, border: `1px solid ${COLORS.panelBorder}`, color: COLORS.text, padding: "2px 4px", borderRadius: 2, fontSize: 11, fontFamily: "inherit" };
   const btnStyle = { background: COLORS.btnBg, color: COLORS.text, border: "none", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "inherit" };
@@ -746,6 +762,22 @@ function AdapterEditor() {
               React.createElement("span", { style: { color: COLORS.textDim } }, "×"),
               React.createElement("input", { type: "number", min: 1, max: 20, value: adapter.heightPins, onChange: e => setAdapter(a => ({ ...a, heightPins: parseInt(e.target.value) || 1 })), style: { ...inputStyle, width: 40 } }),
             ),
+            React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Base grid (mm)"),
+            React.createElement("select", {
+              value: baseGrid,
+              onChange: e => {setBaseGrid(parseFloat(e.target.value) || DEFAULT_BASE_GRID);
+                              setBasePitchKey(e.target.value)
+              },
+              style: inputStyle,
+            },
+              /*Object.keys(BASE_PITCH_PROFILES).map(key => React.createElement("option", { key, value: key }, `${key} mm`))*/
+              BASE_GRID_OPTIONS.map(v => React.createElement("option", { key: v, value: v }, `${v} mm`))
+            ),
+            /*
+            React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Pitch"),
+            React.createElement("select", { value: basePitchKey, onChange: e => setBasePitchKey(e.target.value), style: inputStyle },
+              Object.keys(BASE_PITCH_PROFILES).map(key => React.createElement("option", { key, value: key }, `${key} mm`))
+            ),*/
           ),
         ),
 
@@ -802,7 +834,7 @@ function AdapterEditor() {
           ),
           React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6 } },
             React.createElement("label", { style: { fontSize: 10, display: "flex", gap: 3, alignItems: "center", cursor: "pointer" } },
-              React.createElement("input", { type: "checkbox", checked: snapToGrid, onChange: () => { setSnapToGrid(!snapToGrid); setSnapSmall(false); } }), "2.54mm (G)"
+                            React.createElement("input", { type: "checkbox", checked: snapToGrid, onChange: () => { setSnapToGrid(!snapToGrid); setSnapSmall(false); } }), `${baseGrid}mm (G)`
             ),
             React.createElement("label", { style: { fontSize: 10, display: "flex", gap: 3, alignItems: "center", cursor: "pointer" } },
               React.createElement("input", { type: "checkbox", checked: snapSmall, onChange: () => { setSnapSmall(!snapSmall); setSnapToGrid(false); } }), "0.127mm (S)"
@@ -825,8 +857,8 @@ function AdapterEditor() {
               const rotated = applyFootprintRotationToImport(result, adapter.originOffset.rot || 0);
 
               // Auto-set grid size from board dimensions
-              const gridW = Math.round(result.boardW / GRID) + 1;
-              const gridH = Math.round(result.boardH / GRID) + 1;
+              const gridW = Math.round(result.boardW / baseGrid) + 1;
+              const gridH = Math.round(result.boardH / baseGrid) + 1;
               setAdapter(a => ({
                 ...a,
                 widthPins: gridW, heightPins: gridH,
@@ -902,9 +934,9 @@ function AdapterEditor() {
             const w = toWorld(sx, sy), snapped = snapWorld(w.x, w.y);
 
             if (tool === "select" && !e.altKey) {
-              const col = Math.round(w.x / GRID), row = Math.round(w.y / GRID);
+              const col = Math.round(w.x / baseGrid), row = Math.round(w.y / baseGrid);
               if (col >= 0 && col < adapter.widthPins && row >= 0 && row < adapter.heightPins) {
-                const dist = Math.sqrt((w.x - col * GRID) ** 2 + (w.y - row * GRID) ** 2);
+                const dist = Math.sqrt((w.x - col * baseGrid) ** 2 + (w.y - row * baseGrid) ** 2);
                 if (dist < 0.8) {
                   const idx = adapter.throughPins.findIndex(tp => tp.col === col && tp.row === row);
                   if (idx >= 0) setAdapter(a => ({ ...a, throughPins: a.throughPins.filter((_, i) => i !== idx) }));
@@ -932,8 +964,8 @@ function AdapterEditor() {
 
           // Grid boundary
           (() => {
-            const tl = toScreen(0, (adapter.heightPins - 1) * GRID);
-            const br = toScreen((adapter.widthPins - 1) * GRID, 0);
+            const tl = toScreen(0, (adapter.heightPins - 1) * baseGrid);
+            const br = toScreen((adapter.widthPins - 1) * baseGrid, 0);
             return React.createElement("rect", { x: tl.sx - 6, y: tl.sy - 6, width: br.sx - tl.sx + 12, height: br.sy - tl.sy + 12, fill: "none", stroke: COLORS.panelBorder, strokeWidth: 1, strokeDasharray: "4 4", rx: 4 });
           })(),
 
@@ -944,8 +976,10 @@ function AdapterEditor() {
             const label = adapter.throughPins.find(tp => tp.col === d.col && tp.row === d.row)?.label;
             return React.createElement("g", { key: i },
               isTH ? React.createElement(React.Fragment, null,
-                React.createElement("circle", { cx: sx, cy: sy, r: 0.8 * pxPerMm, fill: COLORS.gridDotTH }),
-                React.createElement("circle", { cx: sx, cy: sy, r: 0.5 * pxPerMm, fill: COLORS.gridDotTHInner }),
+                //React.createElement("circle", { cx: sx, cy: sy, r: 0.8 * pxPerMm, fill: COLORS.gridDotTH }),
+                //React.createElement("circle", { cx: sx, cy: sy, r: 0.5 * pxPerMm, fill: COLORS.gridDotTHInner }),
+                React.createElement("circle", { cx: sx, cy: sy, r: (baseGrid/3) * pxPerMm, fill: COLORS.gridDotTH }),
+                React.createElement("circle", { cx: sx, cy: sy, r: (baseGrid/5) * pxPerMm, fill: COLORS.gridDotTHInner }),
                 React.createElement("text", { x: sx, y: sy + 0.25 * pxPerMm, textAnchor: "middle", fill: "#fff", fontSize: Math.max(0.45 * pxPerMm, 8), fontFamily: "monospace", style: { pointerEvents: "none" } }, label),
               ) : React.createElement("circle", { cx: sx, cy: sy, r: 3, fill: COLORS.gridDot }),
             );
