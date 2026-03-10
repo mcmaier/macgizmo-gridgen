@@ -41,7 +41,7 @@
   let showAdapterOverlays = $state(true);
   let showModuleOverlays = $state(true);
   let selectedSignalTrackIndex = $state(null);
-  let lastPitch = $state(defaultConfig.pitch);
+  let pendingPitch = $state(defaultConfig.pitch);
 
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
@@ -87,7 +87,7 @@
       const imported = parseProject(text, defaultConfig);
 
       config = imported.config;
-      lastPitch = imported.config.pitch;      
+      pendingPitch = imported.config.pitch;      
       modules = imported.modules;
       adapters = imported.adapters;
       selectedInstanceId = null;
@@ -187,8 +187,9 @@
   }
   
   $effect(() => {
-if (config.pitch === lastPitch) return;
+if (pendingPitch === config.pitch) return;
 
+  const nextPitch = pendingPitch;
     const hasPlacedItems = adapters.length > 0 || modules.length > 0;
     if (hasPlacedItems) {
       const shouldResetPlacedItems = confirm(
@@ -196,10 +197,7 @@ if (config.pitch === lastPitch) return;
       );
 
       if (!shouldResetPlacedItems) {
-        config = {
-          ...config,
-          pitch: lastPitch,
-        };
+        pendingPitch = config.pitch;
         return;
       }
     }
@@ -207,14 +205,14 @@ if (config.pitch === lastPitch) return;
     config = applyPitchProfile({
       ...config,
       signalTracks: [],
-    }, config.pitch);
+    }, nextPitch);
     
     adapters = [];
     modules = [];
     selectedInstanceId = null;
     signalTrackDrawMode = false;
     selectedSignalTrackIndex = null;
-    lastPitch = config.pitch;
+    pendingPitch = config.pitch;
   });
 </script>
 
@@ -238,7 +236,7 @@ if (config.pitch === lastPitch) return;
 
   <div class="ppp-layout">
     <aside class="ppp-sidebar">
-      <Controls bind:config onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
+      <Controls bind:config bind:pendingPitch onExport={handleExport} onSaveProject={handleSaveProject} onLoadProject={handleLoadProject} {resolvedAdapters} signalTrackDrawMode={signalTrackDrawMode} onToggleSignalTrackDrawMode={toggleSignalTrackDrawMode} onDeleteCustomTracks={clearCustomSignalTracks} {selectedSignalTrackIndex} onDeleteAllCustomTracks={clearAllCustomSignalTracks} />
     </aside>
     <main class="ppp-main">
       <ModuleToolbar bind:modules bind:adapters {config} {selectedInstanceId} {onSelect} bind:showAdapterOverlays bind:showModuleOverlays />
