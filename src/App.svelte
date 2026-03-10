@@ -189,10 +189,29 @@
   $effect(() => {
     if (config.pitch === lastPitch) return;
 
+    const hasPlacedItems = adapters.length > 0 || modules.length > 0;
+    if (hasPlacedItems) {
+      const shouldResetPlacedItems = confirm(
+        'Changing main grid pitch will remove all placed adapters and modules. Continue?'
+      );
+
+      if (!shouldResetPlacedItems) {
+        config = {
+          ...config,
+          pitch: lastPitch,
+        };
+        return;
+      }
+    }
+
     config = applyPitchProfile({
       ...config,
       signalTracks: [],
     }, config.pitch);
+    
+    adapters = [];
+    modules = [];
+    selectedInstanceId = null;
     signalTrackDrawMode = false;
     selectedSignalTrackIndex = null;
     lastPitch = config.pitch;

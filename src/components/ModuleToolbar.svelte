@@ -6,6 +6,7 @@
   let { modules = $bindable(), adapters = $bindable(), config, selectedInstanceId, onSelect, showModuleOverlays = $bindable(), showAdapterOverlays = $bindable() } = $props();
   let selectedModuleId = $state('');
   let selectedAdapterId = $state('');
+  let lastPitch = $state(null);
 
   // ── Module filtering ──
   let moduleCategories = $derived.by(() => {
@@ -19,7 +20,7 @@
 
   // ── Adapter filtering ──
   let adapterCategories = $derived.by(() => {
-    const matching = ADAPTER_LIBRARY.filter(a => isAdapterCompatibleWithPitch(a, config.pitch));
+    const matching = ADAPTER_LIBRARY.filter(a => isAdapterCompatibleWithPitch(a, config.pitch));    
     const cats = {};
     for (const a of matching) {
       (cats[a.category] ??= []).push(a);
@@ -27,17 +28,54 @@
     return cats;
   });
 
-  // Reset selections when pitch changes
+    // Reset selections when pitch changes
   $effect(() => {
+    if (lastPitch === null) {
+      lastPitch = config.pitch;
+    } else if (config.pitch !== lastPitch) {
+      // Always clear adapter picker on pitch switch so stale select state
+      // cannot keep an invisible adapter selected in the background.
+      selectedAdapterId = '';
+      lastPitch = config.pitch;
+    }
+
     if (selectedModuleId) {
       const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
       if (def && def.pitch !== config.pitch) selectedModuleId = '';
     }
     if (selectedAdapterId) {
       const def = ADAPTER_LIBRARY.find(a => a.id === selectedAdapterId);
-      if (def && !isAdapterCompatibleWithPitch(def, config.pitch)) selectedAdapterId = '';
+      if (!def || !isAdapterCompatibleWithPitch(def, config.pitch)) selectedAdapterId = '';
     }
   });
+
+  /*
+  let availableAdapterIds = $derived(new Set(ADAPTER_LIBRARY
+    .filter(a => isAdapterCompatibleWithPitch(a, config.pitch))
+    .map(a => a.id)));
+
+  // Keep selections in sync with active pitch/options
+  $effect(() => {
+    if (selectedModuleId) {
+      const def = MODULE_LIBRARY.find(m => m.id === selectedModuleId);
+      if (!def || def.pitch !== config.pitch) selectedModuleId = '';
+    }
+
+    if (selectedAdapterId && !availableAdapterIds.has(selectedAdapterId)) {
+      selectedAdapterId = '';
+    }
+  });
+
+  $effect(() => {
+    if (selectedInstanceId === null) return;
+
+    const instanceExists = adapters.some(a => a.id === selectedInstanceId)
+      || modules.some(m => m.id === selectedInstanceId);
+
+    if (!instanceExists) onSelect(null);
+  });
+  */
+
 
   // Remove placed items that don't match the new pitch
   $effect(() => {
@@ -182,7 +220,8 @@ function addModule() {
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06L.646 2.646a.5.5 0 1 1 .708-.708l14 14a.5.5 0 0 1-.708.708z"/></svg>
       {/if}
     </button>
-    <button class="add-btn adapter-accent" onclick={addAdapter} disabled={!selectedAdapterId} title="Place adapter">+</button>
+    <!-- <button class="add-btn adapter-accent" onclick={addAdapter} disabled={!selectedAdapterId || !availableAdapterIds.has(selectedAdapterId)} title="Place adapter">+</button> -->
+     <button class="add-btn adapter-accent" onclick={addAdapter} disabled={!selectedAdapterId} title="Place adapter">+</button>
     <select class="item-select adapter-accent" bind:value={selectedAdapterId}>
       <option value="">Adapter...</option>
       {#each Object.entries(adapterCategories) as [cat, adps]}

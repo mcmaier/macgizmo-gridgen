@@ -65,8 +65,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: VARIABLE_SUBGRID_ADAPTER_ID,
       name: 'Variable Sub-Grid',
-      category: 'SMD Pads',
-      pitch: 2.54,
+      category: 'Grid',      
       color: '#606060',
       throughPins: [],
       features: {
