@@ -636,99 +636,107 @@ function AdapterEditor() {
     return transformPoint(x, y);
   }, [transformPoint]);
 
-  const generateCode = useMemo(() => {
-    const { id, name, category, widthPins, heightPins, smdPads, traces, throughPins, originOffset, silkBody, silkLines, silkText } = adapter;
+  const generateJson = useMemo(() => {
+    const { id, name, category, widthPins, heightPins, smdPads, traces, throughPins, silkBody, silkLines, silkText } = adapter;
 
-    const basePitchProfile = BASE_PITCH_PROFILES[basePitchKey] || BASE_PITCH_PROFILES['2.54'];
-    const defineSuffix = basePitchProfile.defineSuffix;
-    let c = `  // #define IFACE_PIN_PAD_${defineSuffix} ${interfacePinPad}  // from gridProfiles\n`;
-    c += `  // #define IFACE_PIN_DRILL_${defineSuffix} ${interfacePinDrill}  // from gridProfiles\n`;
-    c += `  {\n    id: '${id}',\n    name: '${name}',\n    category: '${category}',\n    pitch: ${baseGrid},\n    color: '#a060c0',\n    interfacePinPad: ${interfacePinPad},\n    interfacePinDrill: ${interfacePinDrill},\n\n`;
-    
-    c += `    throughPins: [\n`;
-    throughPins.forEach(tp => { c += `      { col: ${tp.col}, row: ${tp.row}, label: '${tp.label}' },\n`; });
-    c += `    ],\n\n    features: {\n      copper: [\n        // SMD pads\n`;
+    const copper = [];
     smdPads.forEach(p => {
       const pos = transformPoint(p.x, p.y);
       const rot = transformRotation(p.rotation || 0);
-      c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${p.w}, h: ${p.h}${rot ? `, rotation: ${rot}` : ''} },   // Pin ${p.pin}\n`;
+      const pad = { type: 'pad', x: roundTo(pos.x, 4), y: roundTo(pos.y, 4), w: p.w, h: p.h };
+      if (rot) pad.rotation = rot;
+      copper.push(pad);
     });
-    c += `\n        // F.Cu traces\n`;
     traces.forEach(t => { t.segments.forEach(s => {
       const p1 = transformTracePoint(t, s.x1, s.y1);
       const p2 = transformTracePoint(t, s.x2, s.y2);
-      c += `        { type: 'trace', x1: ${roundTo(p1.x, 4)}, y1: ${roundTo(p1.y, 4)}, x2: ${roundTo(p2.x, 4)}, y2: ${roundTo(p2.y, 4)}, w: ${s.w} },\n`;}); 
-    });
-    c += `      ],\n`;
+      copper.push({ type: 'trace', x1: roundTo(p1.x, 4), y1: roundTo(p1.y, 4), x2: roundTo(p2.x, 4), y2: roundTo(p2.y, 4), w: s.w });
+    }); });
 
-    // B.Cu (copperBack)
-    if (bottomPads.length > 0 || bottomTraces.length > 0) {
-      c += `      copperBack: [\n`;
-        bottomPads.forEach(p => {
-          const pos = transformPoint(p.x, p.y);
-          const rot = transformRotation(p.rotation || 0);
-          c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${p.w}, h: ${p.h}${rot ? `, rotation: ${rot}` : ''} },   // Pin ${p.pin}\n`;
-        });
-
-      bottomTraces.forEach(t => { t.segments.forEach(s => {
-        const p1 = transformTracePoint(t, s.x1, s.y1);
-        const p2 = transformTracePoint(t, s.x2, s.y2);
-        c += `        { type: 'trace', x1: ${roundTo(p1.x, 4)}, y1: ${roundTo(p1.y, 4)}, x2: ${roundTo(p2.x, 4)}, y2: ${roundTo(p2.y, 4)}, w: ${s.w} },\n`;});
-       });
-      c += `      ],\n`;
-    }
-
-    // Vias (drills)
-    if (vias.length > 0) {
-      c += `      drills: [\n`;
-      vias.forEach(v => {
-        const p = transformPoint(v.x, v.y);
-        c += `        { x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)}, drill: ${v.drill}, size: ${v.size} },\n`;
-      });
-      c += `      ],\n`;
-    }
-
-    c += `      mask: [\n`;
-        smdPads.forEach(p => {
+    const mask = smdPads.map(p => {
       const pos = transformPoint(p.x, p.y);
       const rot = transformRotation(p.rotation || 0);
-      c += `        { type: 'pad', x: ${roundTo(pos.x, 4)}, y: ${roundTo(pos.y, 4)}, w: ${roundTo(p.w + maskExpansion * 2, 4)}, h: ${roundTo(p.h + maskExpansion * 2, 4)}${rot ? `, rotation: ${rot}` : ''} },\n`;
+      const pad = { type: 'pad', x: roundTo(pos.x, 4), y: roundTo(pos.y, 4), w: roundTo(p.w + maskExpansion * 2, 4), h: roundTo(p.h + maskExpansion * 2, 4) };
+      if (rot) pad.rotation = rot;
+      return pad;
     });
-    c += `      ],\n      silk: [\n`;
+
+    const silk = [];
     if (silkBody && silkBody.length > 2) {
-      c += `        { type: 'poly', points: [\n`;
-      silkBody.forEach(pt => {
-        const p = transformPoint(pt.x, pt.y);
-        c += `          { x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)} },\n`;
-      });
-      const p0 = transformPoint(silkBody[0].x, silkBody[0].y);
-      c += `          { x: ${roundTo(p0.x, 4)}, y: ${roundTo(p0.y, 4)} },\n        ]},\n`;
-      c += `          { x: ${roundTo(silkBody[0].x + ox, 4)}, y: ${roundTo(silkBody[0].y + oy, 4)} },\n        ]},\n`;
+      const points = silkBody.map(pt => { const p = transformPoint(pt.x, pt.y); return { x: roundTo(p.x, 4), y: roundTo(p.y, 4) }; });
+      points.push({ x: points[0].x, y: points[0].y });
+      silk.push({ type: 'poly', points });
     }
     silkLines.forEach(s => {
-            const p1 = transformPoint(s.x1, s.y1);
+      const p1 = transformPoint(s.x1, s.y1);
       const p2 = transformPoint(s.x2, s.y2);
-      c += `        { type: 'poly', points: [{ x: ${roundTo(p1.x, 4)}, y: ${roundTo(p1.y, 4)} }, { x: ${roundTo(p2.x, 4)}, y: ${roundTo(p2.y, 4)} }] },\n`;
+      silk.push({ type: 'poly', points: [{ x: roundTo(p1.x, 4), y: roundTo(p1.y, 4) }, { x: roundTo(p2.x, 4), y: roundTo(p2.y, 4) }] });
     });
     if (smdPads.length > 0) {
       const p1 = smdPads[0];
       const marker = transformPoint(p1.x - 0.3, p1.y + 0.5);
-      c += `        { type: 'circle', x: ${roundTo(marker.x, 4)}, y: ${roundTo(marker.y, 4)}, d: 0.25 },\n`;
+      silk.push({ type: 'circle', x: roundTo(marker.x, 4), y: roundTo(marker.y, 4), d: 0.25 });
     }
-    c += `      ],\n`;
-    if (silkText.length > 0) {
-      c += `      silkText: [\n`;
-      silkText.forEach(t => {
-                const p = transformPoint(t.x, t.y);
-        c += `        { type: 'text', text: '${t.text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}', x: ${roundTo(p.x, 4)}, y: ${roundTo(p.y, 4)}, height: ${t.height || 1}, rotation: ${transformRotation(t.rotation || 0)} },\n`;
+
+    const features = { copper, mask, silk };
+
+    if (bottomPads.length > 0 || bottomTraces.length > 0) {
+      const copperBack = [];
+      bottomPads.forEach(p => {
+        const pos = transformPoint(p.x, p.y);
+        const rot = transformRotation(p.rotation || 0);
+        const pad = { type: 'pad', x: roundTo(pos.x, 4), y: roundTo(pos.y, 4), w: p.w, h: p.h };
+        if (rot) pad.rotation = rot;
+        copperBack.push(pad);
       });
-      c += `      ],\n`;
+      bottomTraces.forEach(t => { t.segments.forEach(s => {
+        const p1 = transformTracePoint(t, s.x1, s.y1);
+        const p2 = transformTracePoint(t, s.x2, s.y2);
+        copperBack.push({ type: 'trace', x1: roundTo(p1.x, 4), y1: roundTo(p1.y, 4), x2: roundTo(p2.x, 4), y2: roundTo(p2.y, 4), w: s.w });
+      }); });
+      features.copperBack = copperBack;
     }
-    c += `    },\n\n`;
-    c += `    outline: { width: ${roundTo((widthPins - 1) * baseGrid + 2, 1)}, height: ${roundTo((heightPins - 1) * baseGrid + 2, 1)} },\n`;
-    c += `    outlineOffset: { x: 0, y: 0 },\n    widthPins: ${widthPins},\n    heightPins: ${heightPins},\n  },`;
-    return c;
+
+    if (vias.length > 0) {
+      features.drills = vias.map(v => {
+        const p = transformPoint(v.x, v.y);
+        return { x: roundTo(p.x, 4), y: roundTo(p.y, 4), drill: v.drill, size: v.size };
+      });
+    }
+
+    if (silkText.length > 0) {
+      features.silkText = silkText.map(t => {
+        const p = transformPoint(t.x, t.y);
+        return { type: 'text', text: t.text, x: roundTo(p.x, 4), y: roundTo(p.y, 4), height: t.height || 1, rotation: transformRotation(t.rotation || 0) };
+      });
+    }
+
+    const obj = {
+      id,
+      name,
+      category,
+      pitch: baseGrid,
+      color: '#a060c0',
+      throughPins: throughPins.map(tp => ({ col: tp.col, row: tp.row, label: tp.label })),
+      features,
+      outline: { width: roundTo((widthPins - 1) * baseGrid + 2, 1), height: roundTo((heightPins - 1) * baseGrid + 2, 1) },
+      outlineOffset: { x: 0, y: 0 },
+      widthPins,
+      heightPins,
+    };
+
+    return JSON.stringify(obj, null, 2);
   }, [adapter, maskExpansion, bottomPads, bottomTraces, vias, transformPoint, transformRotation, transformTracePoint, baseGrid, basePitchKey, interfacePinPad, interfacePinDrill]);
+
+  const downloadJson = () => {
+    const blob = new Blob([generateJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${adapter.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const gridDots = [];
   for (let c = 0; c < adapter.widthPins; c++)
@@ -899,7 +907,10 @@ function AdapterEditor() {
         ),
 
         // Export
-        React.createElement("button", { onClick: () => setShowCode(!showCode), style: { ...btnStyle, background: COLORS.accent, color: "#fff", padding: "6px 8px", fontSize: 11 } }, showCode ? "Hide Code" : "📋 Export JS Code"),
+        React.createElement("div", { style: { display: "flex", gap: 4 } },
+          React.createElement("button", { onClick: downloadJson, style: { ...btnStyle, background: COLORS.accent, color: "#fff", padding: "6px 8px", fontSize: 11, flex: 1 } }, "💾 Download JSON"),
+          React.createElement("button", { onClick: () => setShowCode(!showCode), style: { ...btnStyle, padding: "6px 8px", fontSize: 11 } }, showCode ? "▶" : "{ }"),
+        ),
 
         // Layer toggle        
         (bottomPads.length > 0 || bottomTraces.length > 0 || vias.length > 0) && React.createElement("fieldset", { style: { border: `1px solid ${COLORS.panelBorder}`, padding: 8, borderRadius: 4 } },
@@ -1209,13 +1220,16 @@ function AdapterEditor() {
         ),
       ),
 
-      // Code panel
+      // JSON preview panel
       showCode && React.createElement("div", { style: { width: 420, borderLeft: `1px solid ${COLORS.panelBorder}`, background: COLORS.panelBg, display: "flex", flexDirection: "column" } },
         React.createElement("div", { style: { padding: "8px 12px", borderBottom: `1px solid ${COLORS.panelBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center" } },
-          React.createElement("span", { style: { fontSize: 11, color: COLORS.accent } }, "GENERATED CODE"),
-          React.createElement("button", { onClick: () => { navigator.clipboard?.writeText(generateCode); }, style: btnStyle }, "📋 Copy"),
+          React.createElement("span", { style: { fontSize: 11, color: COLORS.accent } }, "JSON PREVIEW"),
+          React.createElement("div", { style: { display: "flex", gap: 4 } },
+            React.createElement("button", { onClick: () => { navigator.clipboard?.writeText(generateJson); }, style: btnStyle }, "📋 Copy"),
+            React.createElement("button", { onClick: downloadJson, style: { ...btnStyle, background: COLORS.accent } }, "💾 Download"),
+          ),
         ),
-        React.createElement("pre", { style: { flex: 1, margin: 0, padding: 12, overflow: "auto", fontSize: 10, lineHeight: 1.5, color: COLORS.text, whiteSpace: "pre-wrap" } }, generateCode),
+        React.createElement("pre", { style: { flex: 1, margin: 0, padding: 12, overflow: "auto", fontSize: 10, lineHeight: 1.5, color: COLORS.text, whiteSpace: "pre-wrap" } }, generateJson),
       ),
     )
   );
