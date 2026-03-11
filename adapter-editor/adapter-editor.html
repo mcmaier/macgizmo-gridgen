@@ -863,7 +863,7 @@ function AdapterEditor() {
       outlineOffset: { x: 0, y: 0 },
       widthPins,
       heightPins,      
-      silkLabel: adapter.silkLabel?.show ? { x: adapter.silkLabel.x, y: adapter.silkLabel.y, height: adapter.silkLabel.height || 1 } : undefined,
+      silkLabel: adapter.silkLabel?.show ? {text:adapter.name, rotation:0, x: adapter.silkLabel.x, y: adapter.silkLabel.y, height: adapter.silkLabel.height || 1 } : undefined,
       overlay,
     };
 

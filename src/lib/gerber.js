@@ -47,9 +47,6 @@ export const LABEL_HEIGHT = 1;
 /** Label step interval (every N-th row/col gets a label) */
 export const LABEL_STEP = 5;
 
-export const SMD_PAD_SIZE = 1.2;
-export const SMD_PAD_GRID = 2.54;
-
 // ─── Gerber format helpers ────────────────────────────────────────────
 
 const GERBER_HEADER = (layerName) => `G04 MacGizmo GridGen - Parametric Prototype PCB*
@@ -757,9 +754,9 @@ export function generateCopperLayer(config, layerName = 'B.Cu', placedAdapters =
             }
           }      
         } else {
-        // Simple adapter: auto-generate SMD pad matrix for hand-soldering
-        const smdPadSize = SMD_PAD_SIZE;
-        const smdGridPitch = SMD_PAD_GRID;
+        // Simple adapter: auto-generate SMD pad matrix for hand-soldering        
+        const smdGridPitch = config.pitch;
+        const smdPadSize = Math.floor(smdGridPitch/2);
         const key = `S${smdPadSize.toFixed(4)}`;
         if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
         const aperture = rectApertures.get(key);
@@ -969,9 +966,10 @@ export function generateSolderMask(config, layerName = 'B.Mask', placedAdapters 
           }
         } else {
         // Simple adapter: auto-generate mask openings for SMD pad matrix
-        const smdPadSize = SMD_PAD_SIZE;
+        const smdGridPitch = config.pitch;
+        const smdPadSize = Math.floor(smdGridPitch/2);
         const smdMaskSize = smdPadSize + maskExpansion * 2;
-        const smdGridPitch = SMD_PAD_GRID;
+
         const key = `S${smdMaskSize.toFixed(4)}`;
         if (!rectApertures.has(key)) rectApertures.set(key, nextAperture++);
         const aperture = rectApertures.get(key);
