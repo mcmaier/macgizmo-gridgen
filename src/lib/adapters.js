@@ -36,7 +36,7 @@ import { getPitchProfile } from './gridProfiles.js';
 /** Base path for module overlay PNGs. */
 export let adapterOverlayBasePath = './assets/adapters';
 export const VARIABLE_SUBGRID_ADAPTER_ID = 'subgrid-variable';
-export const VARIABLE_SUBGRID_PAD_SHAPES = ['square', 'circle'];
+export const VARIABLE_SUBGRID_PAD_SHAPES = ['circle', 'square', 'square-smd'];
 
 
 /** Basic adapters only - other footprints are separate JSON files in assets/adapters */
@@ -366,7 +366,7 @@ export async function loadAdaptersFromFile(file) {
 }
 
 // 2. Runtime: optionale Server-Bibliothek aus public/assets/adapters/library.json
-loadAdaptersFromUrl(`${adapterOverlayBasePath}/library.json`);
+//loadAdaptersFromUrl(`${adapterOverlayBasePath}/library.json`);
 
 // ═══════════════════════════════════════════════════════════════════
 // Helper Functions
@@ -428,6 +428,7 @@ export function getAdapterForInstance(inst) {
     pitch: basePitch,
     subGridPitch,
     subDrillSize,
+    subPadShape,
     throughPins: adapter.throughPins,
   });
 
@@ -688,7 +689,7 @@ function buildSubgridMask({ widthPins, heightPins, pitch, subGridPitch, subPadSi
   return pads;
 }
 
-function buildSubgridDrills({ widthPins, heightPins, pitch, subGridPitch, subDrillSize, throughPins = [] }) {
+function buildSubgridDrills({ widthPins, heightPins, pitch, subGridPitch, subDrillSize, subPadShape = 'square', throughPins = [] }) {
   const drills = [];
   const endX = (widthPins - 1) * pitch;
   const endY = (heightPins - 1) * pitch;
@@ -703,7 +704,7 @@ function buildSubgridDrills({ widthPins, heightPins, pitch, subGridPitch, subDri
         const ty = pin.row * pitch;
         return Math.abs(rx - tx) < thKeepout && Math.abs(ry - ty) < thKeepout;
       });
-      if (!blocked) drills.push({ type: 'via', x: rx, y: ry, drill: subDrillSize, size: subDrillSize });
+      if (!blocked && subPadShape !== 'square-smd') drills.push({ type: 'via', x: rx, y: ry, drill: subDrillSize, size: subDrillSize });
     }
   }
 

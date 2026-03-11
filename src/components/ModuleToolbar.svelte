@@ -1,6 +1,6 @@
 <script>
   import { MODULE_LIBRARY } from '../lib/modules.js';
-  import { ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID, cycleVariableSubgridPitch, cycleVariableSubgridPadShape, isAdapterCompatibleWithPitch, getVariableSubgridPitches } from '../lib/adapters.js';
+  import { ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID, VARIABLE_SUBGRID_PAD_SHAPES, cycleVariableSubgridPitch, cycleVariableSubgridPadShape, isAdapterCompatibleWithPitch, getVariableSubgridPitches } from '../lib/adapters.js';
   import { getPitchProfile } from '../lib/gridProfiles.js';
 
   let { modules = $bindable(), adapters = $bindable(), config, selectedInstanceId, onSelect, showModuleOverlays = $bindable(), showAdapterOverlays = $bindable() } = $props();
@@ -72,7 +72,7 @@
           subGridPitch: nextPitch,
           subPadSize: profile.padSize,
           subGridDrill: profile.drillSize,
-          subPadShape: a.subPadShape === 'circle' ? 'circle' : 'square',
+          subPadShape: VARIABLE_SUBGRID_PAD_SHAPES.includes(a.subPadShape) ? a.subPadShape : 'square',
         };
       });
     if (JSON.stringify(filteredAdp) !== JSON.stringify(adapters)) adapters = filteredAdp;
@@ -258,7 +258,7 @@ function addModule() {
           <span class="chip-name">⚡{getAdapterDisplayName(inst)}</span>
            {#if inst.adapterId === VARIABLE_SUBGRID_ADAPTER_ID}            
             <button class="chip-action" onclick={(e) => { e.stopPropagation(); changeAdapterGrid(inst.id); }} title="Change Sub-Grid Pitch (Space)">#</button>
-            <button class="chip-action" onclick={(e) => { e.stopPropagation(); changeAdapterPadShape(inst.id); }} title="Toggle Pad Shape (Shift+Space)">{inst.subPadShape === 'circle' ? '●' : '■'}</button>
+            <button class="chip-action" onclick={(e) => { e.stopPropagation(); changeAdapterPadShape(inst.id); }} title="Toggle Pad Shape (Shift+Space)">{inst.subPadShape === 'circle' ? '●' : inst.subPadShape === 'square-smd' ? '□' : '■'}</button>
             {:else}
             <button class="chip-action" onclick={(e) => { e.stopPropagation(); rotateAdapter(inst.id); }} title="Rotate (Space)">↻</button>
           {/if}          

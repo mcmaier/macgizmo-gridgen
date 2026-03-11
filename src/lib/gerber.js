@@ -15,7 +15,6 @@
  */
 
 import { getTextStrokes, colLabel } from './font.js';
-import { VARIABLE_SUBGRID_ADAPTER_ID } from './adapters.js';
 
 // ─── Configurable constants ───────────────────────────────────────────
 /** Number of grid rows/cols used per rail (VCC + GND) */
@@ -1273,7 +1272,7 @@ export function generateLabelStrokes(config) {
 
   // ── Column labels (top side, letters A-based) ──
   const colStep = labels.cols || 0;
-  if (colStep === 1) {
+  if (colStep > 0) {
     const sigColCount = sigColEnd - sigColStart;
     for (let col = sigColStart; col <= sigColEnd; col++) {
       const sigCol = col - sigColStart;
@@ -1287,7 +1286,13 @@ export function generateLabelStrokes(config) {
       const strokes = getTextStrokes(text, x, y, h, 'center');
       allStrokes.push(...strokes);
               }
-      } 
+      } else if (colStep > 1) {
+        // Tick mark for intermediate columns (only when not labeling every col)
+        const ty = gridTop + gap;
+        if (!labelOverlapsHole(x, ty)) {
+          allStrokes.push(...tickMark(x, ty));
+        }
+      }
     }
   }
 
