@@ -199,6 +199,49 @@ function addModule() {
     if (Number.isFinite(pitch)) return `Sub-Grid: (${pitch}mm)`;
     return 'Sub-Grid';
   }
+
+  // ── Selection-derived state for action buttons ──
+  let selectedAdapter = $derived(adapters.find(a => a.id === selectedInstanceId) ?? null);
+  let selectedModule = $derived(modules.find(m => m.id === selectedInstanceId) ?? null);
+  let selectedIsVariableSubGrid = $derived(selectedAdapter?.adapterId === VARIABLE_SUBGRID_ADAPTER_ID);
+  let selectedHasOptionalFeatures = $derived(
+    selectedAdapter != null && !selectedIsVariableSubGrid && adapterHasOptionalFeatures(selectedAdapter.adapterId)
+  );
+  let actionRotateEnabled = $derived(selectedInstanceId != null && (selectedModule != null || (selectedAdapter != null && !selectedIsVariableSubGrid)));
+  let actionCycleGridEnabled = $derived(selectedIsVariableSubGrid);
+  let actionOptionsEnabled = $derived(selectedIsVariableSubGrid || selectedHasOptionalFeatures);
+
+  function removeSelected() {
+    if (selectedAdapter) removeAdapter(selectedAdapter.id);
+    else if (selectedModule) removeModule(selectedModule.id);
+  }
+
+  function rotateOrCycleSelected() {
+    if (selectedIsVariableSubGrid && selectedAdapter) changeAdapterGrid(selectedAdapter.id);
+    else if (selectedAdapter) rotateAdapter(selectedAdapter.id);
+    else if (selectedModule) rotateModule(selectedModule.id);
+  }
+
+  function optionsToggleSelected() {
+    if (!selectedInstanceId) return;
+    if (selectedIsVariableSubGrid && selectedAdapter) changeAdapterPadShape(selectedAdapter.id);
+    else if (selectedHasOptionalFeatures && selectedAdapter) toggleAdapterOptionalFeatures(selectedAdapter.id);
+  }
+
+  let actionRotateTitle = $derived(
+    selectedIsVariableSubGrid ? 'Change Sub-Grid Pitch (Space)' : 'Rotate (Space)'
+  );
+  let actionOptionsTitle = $derived(
+    selectedIsVariableSubGrid ? 'Toggle Pad Shape (Shift+Space)' : 'Toggle Optional Features (Shift+Space)'
+  );
+  let actionOptionsOn = $derived(
+    selectedIsVariableSubGrid ? false : (selectedAdapter?.showOptionalFeatures ?? false)
+  );
+  let actionOptionsIcon = $derived(
+    selectedIsVariableSubGrid
+      ? (selectedAdapter?.subPadShape === 'circle' ? '●' : selectedAdapter?.subPadShape === 'square-smd' ? '■' : '◙')
+      : '⊕'
+  );
 </script>
 
 <div class="toolbar">
@@ -256,46 +299,59 @@ function addModule() {
       {#if Object.keys(moduleCategories).length === 0}
         <option value="" disabled>No modules ({config.pitch}mm)</option>
       {/if}
-    </select>
-    
+    </select>    
   </div>
 
-  <!-- Placed items as compact chips -->
+  <!-- Placed items with permanent action buttons -->
   {#if adapters.length > 0 || modules.length > 0}
-    <div class="placed-items">
-      {#each adapters as inst (inst.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="chip adapter-chip" class:selected={selectedInstanceId === inst.id}
-          onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
-          onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}
-          role="button" tabindex="0">
-          <span class="chip-name">⚡{getAdapterDisplayName(inst)}</span>
-           {#if inst.adapterId === VARIABLE_SUBGRID_ADAPTER_ID}            
-            <button class="chip-action" onclick={(e) => { e.stopPropagation(); changeAdapterGrid(inst.id); }} title="Change Sub-Grid Pitch (Space)">#</button>
-            <button class="chip-action" onclick={(e) => { e.stopPropagation(); changeAdapterPadShape(inst.id); }} title="Toggle Pad Shape (Shift+Space)">{inst.subPadShape === 'circle' ? '●' : inst.subPadShape === 'square-smd' ? '□' : '■'}</button>
-            {:else}
-            <button class="chip-action" onclick={(e) => { e.stopPropagation(); rotateAdapter(inst.id); }} title="Rotate (Space)">↻</button>
-            {#if adapterHasOptionalFeatures(inst.adapterId)}
-            <button class="chip-action" class:chip-action-on={inst.showOptionalFeatures} onclick={(e) => { e.stopPropagation(); toggleAdapterOptionalFeatures(inst.id); }} title="Toggle Optional Features (Shift+Space)">⊕</button>
+    <div class="placed-bar">
+      <div class="action-col">
+        <button class="action-btn"
+          disabled={!selectedInstanceId || (!actionRotateEnabled && !actionCycleGridEnabled)}
+          onclick={rotateOrCycleSelected}
+          title={actionRotateTitle}>
+          {selectedIsVariableSubGrid ? '#' : '↻'}
+        </button>
+        <button class="action-btn" class:action-btn-on={actionOptionsOn}
+          disabled={!selectedInstanceId || !actionOptionsEnabled}
+          onclick={optionsToggleSelected}
+          title={actionOptionsTitle}>
+          {actionOptionsIcon}
+        </button>
+        <button class="action-btn action-btn-remove"
+          disabled={!selectedInstanceId}
+          onclick={removeSelected}
+          title="Remove (Del)">×</button>
+      </div>
+
+      <div class="placed-items">
+        {#each adapters as inst (inst.id)}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="chip adapter-chip" class:selected={selectedInstanceId === inst.id}
+            onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
+            onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}
+            role="button" tabindex="0">
+            <span class="chip-name">⚡{getAdapterDisplayName(inst)}</span>
+            {#if inst.adapterId === VARIABLE_SUBGRID_ADAPTER_ID}
+              <span class="chip-indicator">{inst.subPadShape === 'circle' ? '●' : inst.subPadShape === 'square-smd' ? '■' : '◙'}</span>
+            {:else if adapterHasOptionalFeatures(inst.adapterId)}
+              <span class="chip-indicator" class:chip-indicator-on={inst.showOptionalFeatures}>⊕</span>
             {/if}
-          {/if}          
-          <button class="chip-action chip-remove" onclick={(e) => { e.stopPropagation(); removeAdapter(inst.id); }} title="Remove (Del)">×</button>
-        </div>
-      {/each}
-      {#each modules as inst (inst.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="chip module-chip" class:selected={selectedInstanceId === inst.id}
-          onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
-          onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}
-          role="button" tabindex="0">
-          <span class="chip-name">{inst.name}</span>
-          <button class="chip-action" onclick={(e) => { e.stopPropagation(); rotateModule(inst.id); }} title="Rotate (Space)">↻</button>
-          <button class="chip-action chip-remove" onclick={(e) => { e.stopPropagation(); removeModule(inst.id); }} title="Remove (Del)">×</button>
-        </div>
-      {/each}
-      {#if adapters.length + modules.length > 1}
-        <button class="chip chip-clear" onclick={clearAll} title="Remove all">Clear all</button>
-      {/if}
+          </div>
+        {/each}
+        {#each modules as inst (inst.id)}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="chip module-chip" class:selected={selectedInstanceId === inst.id}
+            onclick={() => onSelect(selectedInstanceId === inst.id ? null : inst.id)}
+            onkeydown={(e) => { if (e.key === 'Enter') onSelect(selectedInstanceId === inst.id ? null : inst.id); }}
+            role="button" tabindex="0">
+            <span class="chip-name">{inst.name}</span>
+          </div>
+        {/each}
+        {#if adapters.length + modules.length > 1}
+          <button class="chip chip-clear" onclick={clearAll} title="Remove all">Clear all</button>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -320,7 +376,7 @@ function addModule() {
 
   .row-icon {
     font-size: 13px;
-    width: 20px;
+    width: 28px;
     text-align: center;
     flex-shrink: 0;
     cursor: help;
@@ -329,7 +385,7 @@ function addModule() {
   .item-select {
     flex: 1;
     min-width: 0;
-    padding: 5px 6px;
+    padding: 4px 6px;
     background: #313244;
     border: 1px solid #45475a;
     border-radius: 4px;
@@ -341,9 +397,11 @@ function addModule() {
   .item-select.module-accent:focus { border-color: #89b4fa; }
 
   .icon-btn {
+    width: 28px;
+    height: 26px;
     background: none;
     color: #f1f1f1;
-    border: 1px solid transparent;
+    border: 1px solid #5e606b;
     border-radius: 3px;
     cursor: pointer;
     padding: 2px 4px;
@@ -353,11 +411,11 @@ function addModule() {
     transition: opacity 0.1s;
   }
   .icon-btn:hover { opacity: 1; }
-  .icon-btn.off { opacity: 0.35; }
+  .icon-btn.off { opacity: 0.5; }
 
   .add-btn {
     width: 28px;
-    height: 28px;
+    height: 26px;
     border: none;
     border-radius: 4px;
     font-size: 16px;
@@ -375,27 +433,67 @@ function addModule() {
   .add-btn.module-accent:hover { background: #74a8f7; }
   .add-btn:disabled { background: #45475a; color: #585b70; cursor: not-allowed; }
 
+  .placed-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid #313244;
+    align-items: flex-start;
+  }
+
+  .action-col {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex-shrink: 0;
+    align-items: flex-start;
+  }
+
+  .action-btn {
+    width: 28px;
+    height: 26px;    
+    background: none;
+    border: 1px solid #7e8092;
+    border-radius: 4px;
+    color: #cdd6f4;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, opacity 0.1s;
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+  .action-btn:hover:not(:disabled) { background: #313244; opacity: 1; border-color: #6c7086; }
+  .action-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+  .action-btn-remove { color: #f38ba8; }
+  .action-btn-on { color: #a6e3a1; opacity: 1; }
+
   .placed-items {
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
-    padding-top: 4px;
-    border-top: 1px solid #313244;
+    align-content: flex-start;
+    flex: 1;
+    min-width: 0;
   }
 
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    padding: 2px 5px;
+    gap: 3px;
+    padding: 2px 6px;
     background: #313244;
     border: 1px solid #45475a;
     border-radius: 3px;
     color: #cdd6f4;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     transition: background 0.1s;
     line-height: 1.3;
+    min-height: 26px;
   }
   .chip:hover { background: #3a3a50; }
 
@@ -412,19 +510,12 @@ function addModule() {
     white-space: nowrap;
   }
 
-  .chip-action {
-    background: none;
-    border: none;
-    color: #89b4fa;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 0 1px;
+  .chip-indicator {
+    font-size: 10px;
+    opacity: 0.45;
     line-height: 1;
-    opacity: 0.7;
   }
-  .chip-action:hover { opacity: 1; }
-  .chip-action-on { opacity: 1; color: #a6e3a1; }
-  .chip-remove { color: #f38ba8; }
+  .chip-indicator-on { opacity: 1; color: #a6e3a1; }
 
   .chip-clear {
     background: none;
