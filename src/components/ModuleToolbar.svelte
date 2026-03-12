@@ -37,9 +37,10 @@
     if (lastPitch === null) {
       lastPitch = config.pitch;
     } else if (config.pitch !== lastPitch) {
-      // Always clear adapter picker on pitch switch so stale select state
-      // cannot keep an invisible adapter selected in the background.
+      // Always clear pickers on pitch switch so stale select state
+      // cannot keep an invisible item selected in the background.
       selectedAdapterId = '';
+      selectedModuleId = '';
       lastPitch = config.pitch;
     }
 
