@@ -11,7 +11,7 @@
 
   // ── Module filtering ──
   let moduleCategories = $derived.by(() => {
-    // anyPitch modules (reserved area) are shown as a dedicated first option, not in optgroups
+// anyPitch modules (reserved area) are shown as a dedicated first option, not in optgroups
     const matching = MODULE_LIBRARY.filter(m => !m.anyPitch && m.pitch === config.pitch);
     const cats = {};
     for (const m of matching) {

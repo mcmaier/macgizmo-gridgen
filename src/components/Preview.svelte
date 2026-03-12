@@ -12,7 +12,7 @@
 
   const minZoomLevel = 0.8;
 
-    // Resolve adapter definitions with rotation applied
+  // Resolve adapter definitions with rotation applied
   let resolvedAdapters = $derived(adapters.map(inst => ({
     ...inst,
     _adapterDef: getAdapterForInstance(inst),
@@ -255,7 +255,7 @@
     }
   }
 
-  let selectedReservedArea = $derived(
+    let selectedReservedArea = $derived(
     selectedInstanceId !== null
       ? (modules.find(m => m.id === selectedInstanceId && m.moduleId === RESERVED_AREA_MODULE_ID) ?? null)
       : null
@@ -378,7 +378,7 @@
     return corner === 'top-left' || corner === 'bottom-right' ? 'nwse-resize' : 'nesw-resize';
   }
 
-  /** Returns an array of x-offsets for diagonal hatch lines covering a rect of size w×h at given step. */
+    /** Returns an array of x-offsets for diagonal hatch lines covering a rect of size w×h at given step. */
   function hatchOffsets(w, h, step) {
     const count = Math.ceil((w + h) / step) + 2;
     return Array.from({ length: count }, (_, i) => i * step - h);
@@ -1285,8 +1285,6 @@
 
   <!-- Module overlays -->
   {#each sortedModules as inst (inst.id)}
-    {#if inst.moduleId === RESERVED_AREA_MODULE_ID}
-      <!-- Reserved Area: draggable + resizable keepout placeholder -->
       {@const pitch = config.pitch}
       {@const rx = grid.gridLeft + (inst.col || 0) * pitch}
       {@const ry = grid.gridBottom + (inst.row || 0) * pitch}
@@ -1294,6 +1292,62 @@
       {@const rh = ((inst.heightPins || 4) - 1) * pitch}
       {@const isSelected = selectedInstanceId === inst.id}
       {@const clipId = 'rclip-' + inst.id}
+
+    {#if inst.moduleId === RESERVED_AREA_MODULE_ID}
+      <!-- Reserved Area: draggable + resizable keepout placeholder -->
+
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <g class="module-overlay"
+        class:dragging={dragging?.instanceId === inst.id}
+        onpointerdown={(e) => onItemPointerDown(e, inst, 'module')}
+        style="cursor: grab;">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={rx} y={ry} width={rw} height={rh} />
+          </clipPath>
+        </defs>
+        <!-- Fill -->
+        <rect x={rx} y={ry} width={rw} height={rh}
+          fill={inst.color} fill-opacity="0.08"
+          stroke={inst.color} stroke-width="0.25" stroke-dasharray="1 0.5" rx="0.3" />
+        <!-- Diagonal hatching -->
+        <g clip-path={'url(#' + clipId + ')'}>
+          {#each hatchOffsets(rw, rh, pitch) as offset}
+            <line x1={rx + offset} y1={ry} x2={rx + offset + rh} y2={ry + rh}
+              stroke={inst.color} stroke-width="0.18" stroke-opacity="0.35" />
+          {/each}
+        </g>
+        <!-- Selection highlight -->
+        {#if isSelected}
+          <rect x={rx - 0.8} y={ry - 0.8} width={rw + 1.6} height={rh + 1.6}
+            fill="none" stroke={inst.color} stroke-width="0.25" stroke-dasharray="0.6 0.3" rx="0.4" opacity="0.9" />
+        {/if}
+        <!-- Label (flipped back for readability) -->
+        <g transform="translate({rx + rw / 2},{ry + rh / 2}) scale(1,-1)">
+          <text x="0" y="0" text-anchor="middle" dominant-baseline="central"
+            fill={inst.color} fill-opacity="0.75"
+            font-size="{Math.min(2.2, rw * 0.12)}"
+            font-family="'Segoe UI', system-ui, sans-serif"
+            font-weight="600">Reserved</text>
+        </g>
+      </g>
+    {:else}
+    {@const m = moduleToMm(inst)}
+    {@const isSelected = selectedInstanceId === inst.id}
+    {#if m}
+      {@const outW = m.rm.outline.width}
+      {@const outH = m.rm.outline.height}
+      {@const pinW = (m.rm.widthPins - 1) * m.pitch}
+      {@const pinH = (m.rm.heightPins - 1) * m.pitch}
+      {@const oOfs = m.rm.outlineOffset || { x: 0, y: 0 }}
+      {@const ofsX = (outW - pinW) / 2 - oOfs.x}
+      {@const ofsY = (outH - pinH) / 2 - oOfs.y}
+      {@const outCx = m.x - ofsX + outW / 2}
+      {@const outCy = m.y - ofsY + outH / 2}
+      {@const modDef = MODULE_LIBRARY.find(md => md.id === inst.moduleId)}
+      {@const moduleOverlayUrl = getModuleOverlayUrl(modDef)}
+
+
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g class="module-overlay"
         class:dragging={dragging?.instanceId === inst.id}
@@ -1436,6 +1490,7 @@
         </g>
       {/if}
     {/if}
+    {/if}
   {/each}
 
   <!-- Topmost interaction layer: when an adapter is selected, render its hitbox above modules -->
@@ -1478,7 +1533,7 @@
     {/each}
   {/if}
 
-  <!-- Reserved area resize handles (topmost layer) -->
+    <!-- Reserved area resize handles (topmost layer) -->
   {#if selectedReservedArea}
     {@const inst = selectedReservedArea}
     {@const pitch = config.pitch}
