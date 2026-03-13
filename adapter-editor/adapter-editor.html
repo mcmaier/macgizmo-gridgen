@@ -476,6 +476,7 @@ function AdapterEditor() {
   const [traceWidth, setTraceWidth] = useState(0.3);
   const [mousePos, setMousePos] = useState(null);
   const [snapToGrid, setSnapToGrid] = useState(false);
+  const [snap45, setSnap45] = useState(false);
   const [snapSmall, setSnapSmall] = useState(true);
   const [selectedTrace, setSelectedTrace] = useState(null);
   const [selectedPad, setSelectedPad] = useState(null);
@@ -524,6 +525,15 @@ function AdapterEditor() {
     if (snapSmall) { const s = 0.127; return { x: roundTo(Math.round(wx / s) * s, 4), y: roundTo(Math.round(wy / s) * s, 4) }; }
     return { x: roundTo(wx, 3), y: roundTo(wy, 3) };
   }, [snapToGrid, snapSmall, baseGrid]);
+
+  const constrainTo45 = useCallback((wx, wy, fromX, fromY) => {
+    const dx = wx - fromX, dy = wy - fromY;
+    if (dx === 0 && dy === 0) return { x: wx, y: wy };
+    const angle = Math.atan2(dy, dx);
+    const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return { x: roundTo(fromX + dist * Math.cos(snappedAngle), 3), y: roundTo(fromY + dist * Math.sin(snappedAngle), 3) };
+  }, []);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -590,7 +600,10 @@ function AdapterEditor() {
       const dy = w.y - dragSilkTextStart.current.wy;
       setAdapter(a => { const st = [...a.silkText]; st[selectedSilkText] = { ...st[selectedSilkText], x: roundTo(dragSilkTextStart.current.lx + dx, 3), y: roundTo(dragSilkTextStart.current.ly + dy, 3) }; return { ...a, silkText: st }; });
     }
-    setMousePos({ screen: { sx, sy }, world: w, snapped: snapWorld(w.x, w.y) });
+    const snapped = snapWorld(w.x, w.y);
+    const last = tracePoints.length > 0 ? tracePoints[tracePoints.length - 1] : null;
+    const effectiveSnapped = (snap45 && last) ? constrainTo45(snapped.x, snapped.y, last.x, last.y) : snapped;
+    setMousePos({ screen: { sx, sy }, world: w, snapped: effectiveSnapped });
   };
 
   const handleMouseUp = () => { isPanning.current = false; isDraggingSilkLabel.current = false; isDraggingSilkText.current = false; };
@@ -643,6 +656,7 @@ function AdapterEditor() {
     else if (e.key === "p") { setTool("edit-pins"); setTracePoints([]); }
     else if (e.key === "g") { setSnapToGrid(s => !s); setSnapSmall(false); }
     else if (e.key === "s") { setSnapSmall(s => !s); setSnapToGrid(false); }
+    else if (e.key === "a") { setSnap45(s => !s); }
     else if (e.key === "z" && e.ctrlKey) setAdapter(a => ({ ...a, traces: a.traces.slice(0, -1) }));
   }, [finishTrace, tool, tracePoints, selectedTrace, selectedPad, selectedBottomPad, selectedBottomTrace, selectedVia, selectedSilkLine, selectedSilkText, selectedSilkLabel]);
 
@@ -1080,12 +1094,15 @@ function AdapterEditor() {
             React.createElement("span", { style: { fontSize: 10, color: COLORS.textDim } }, " mm"),
             React.createElement("div", { style: { fontSize: 9, color: COLORS.textDim, marginTop: 4 } }, "Click → Enter to finish, Esc to cancel"),
           ),
-          React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6 } },
+          React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" } },
             React.createElement("label", { style: { fontSize: 10, display: "flex", gap: 3, alignItems: "center", cursor: "pointer" } },
                             React.createElement("input", { type: "checkbox", checked: snapToGrid, onChange: () => { setSnapToGrid(!snapToGrid); setSnapSmall(false); } }), `${baseGrid}mm (G)`
             ),
             React.createElement("label", { style: { fontSize: 10, display: "flex", gap: 3, alignItems: "center", cursor: "pointer" } },
               React.createElement("input", { type: "checkbox", checked: snapSmall, onChange: () => { setSnapSmall(!snapSmall); setSnapToGrid(false); } }), "0.127mm (S)"
+            ),
+            React.createElement("label", { style: { fontSize: 10, display: "flex", gap: 3, alignItems: "center", cursor: "pointer" } },
+              React.createElement("input", { type: "checkbox", checked: snap45, onChange: () => setSnap45(s => !s) }), "45° (A)"
             ),
           ),
         ),
@@ -1261,7 +1278,10 @@ function AdapterEditor() {
             if (didDragSilkLabel.current) { didDragSilkLabel.current = false; return; }
             const rect = svgRef.current.getBoundingClientRect();
             const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-            const w = toWorld(sx, sy), snapped = snapWorld(w.x, w.y);
+            const w = toWorld(sx, sy);
+            const _snapped = snapWorld(w.x, w.y);
+            const _lastTp = tracePoints.length > 0 ? tracePoints[tracePoints.length - 1] : null;
+            const snapped = (snap45 && _lastTp) ? constrainTo45(_snapped.x, _snapped.y, _lastTp.x, _lastTp.y) : _snapped;
 
             if (tool === "edit-pins" && !e.altKey) {
               const col = Math.round(w.x / baseGrid), row = Math.round(w.y / baseGrid);

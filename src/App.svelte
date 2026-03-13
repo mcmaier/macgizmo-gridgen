@@ -355,7 +355,7 @@ if (pendingPitch === config.pitch) return;
   :global(div:fullscreen) {
     width: 100vw !important;
     height: 100vh !important;
-    overflow: auto;
+    overflow: hidden;
   }
 
   .ppp-app {
@@ -389,7 +389,7 @@ if (pendingPitch === config.pitch) return;
     grid-template-columns: 280px 1fr;
     gap: 20px;
     align-items: start;
-    max-width: 100vw;
+    max-width: calc(100vw - 40px);
   }
 
   .ppp-sidebar {
@@ -402,7 +402,7 @@ if (pendingPitch === config.pitch) return;
     flex-direction: column;
     gap: 10px;
     min-height: 300px;
-    max-width: 100vw; 
+    max-width: calc(100vw - 40px);
   }
 
   .ppp-footer {
