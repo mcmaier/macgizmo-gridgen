@@ -1,7 +1,8 @@
 <script>
   import { MODULE_LIBRARY, RESERVED_AREA_MODULE_ID } from '../lib/modules.js';
-  import { ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID, VARIABLE_SUBGRID_PAD_SHAPES, cycleVariableSubgridPitch, cycleVariableSubgridPadShape, isAdapterCompatibleWithPitch, getVariableSubgridPitches } from '../lib/adapters.js';
+  import { ADAPTER_LIBRARY, VARIABLE_SUBGRID_ADAPTER_ID, VARIABLE_SUBGRID_PAD_SHAPES, cycleVariableSubgridPitch, cycleVariableSubgridPadShape, isAdapterCompatibleWithPitch, getVariableSubgridPitches, validateAdapterDef } from '../lib/adapters.js';
   import { customAdapters } from '../lib/customAdapters.svelte.js';
+  import { serverAdapters } from '../lib/serverAdapters.svelte.js';
   import { getPitchProfile } from '../lib/gridProfiles.js';
 
   let { modules = $bindable(), adapters = $bindable(), config, selectedInstanceId, onSelect, showModuleOverlays = $bindable(), showAdapterOverlays = $bindable() } = $props();
@@ -24,12 +25,25 @@
   let adapterCategories = $derived.by(() => {
     // Custom adapters always go first under "Custom", regardless of their own category field
     const matchingCustom = customAdapters.list.filter(a => isAdapterCompatibleWithPitch(a, config.pitch));
-    const cats = matchingCustom.length > 0 ? { 'Custom': matchingCustom } : {};
-    const matching = ADAPTER_LIBRARY.filter(a => isAdapterCompatibleWithPitch(a, config.pitch));
-    for (const a of matching) {
-      (cats[a.category] ??= []).push(a);
+
+    // Merge server library + built-in adapters, group by category (exclude Variable Sub-Grid — rendered separately)
+    const libAdapters = [
+      ...serverAdapters.list.filter(a => isAdapterCompatibleWithPitch(a, config.pitch)),
+      ...ADAPTER_LIBRARY.filter(a => isAdapterCompatibleWithPitch(a, config.pitch)),
+    ].filter(a => a.id !== VARIABLE_SUBGRID_ADAPTER_ID);
+    /** @type {Record<string, any[]>} */
+    const libCats = {};
+    for (const a of libAdapters) {
+      (libCats[a.category] ??= []).push(a);
     }
-    return cats;
+
+    // Sort categories alphabetically; sort adapters within each category by name
+    const sortedCats = Object.keys(libCats).sort().reduce((acc, key) => {
+      acc[key] = libCats[key].sort((a, b) => a.name.localeCompare(b.name));
+      return acc;
+    }, /** @type {Record<string, any[]>} */ ({}));
+
+    return matchingCustom.length > 0 ? { 'Custom': matchingCustom, ...sortedCats } : sortedCats;
   });
 
     // Reset selections when pitch changes
@@ -50,6 +64,7 @@
     }
     if (selectedAdapterId) {
       const def = ADAPTER_LIBRARY.find(a => a.id === selectedAdapterId)
+        ?? serverAdapters.list.find(a => a.id === selectedAdapterId)
         ?? customAdapters.list.find(a => a.id === selectedAdapterId);
       if (!def || !isAdapterCompatibleWithPitch(def, config.pitch)) selectedAdapterId = '';
     }
@@ -62,7 +77,7 @@
     const filteredMods = modules.filter(m => validModIds.has(m.moduleId));
     if (filteredMods.length !== modules.length) modules = filteredMods;
 
-    const allAdpDefs = [...ADAPTER_LIBRARY, ...customAdapters.list];
+    const allAdpDefs = [...ADAPTER_LIBRARY, ...serverAdapters.list, ...customAdapters.list];
     const validAdpIds = new Set(allAdpDefs.filter(a => isAdapterCompatibleWithPitch(a, pitch)).map(a => a.id));
     const filteredAdp = adapters
       .filter(a => validAdpIds.has(a.adapterId))
@@ -132,6 +147,7 @@ function addModule() {
   function addAdapter() {
     if (!selectedAdapterId) return;
     const def = ADAPTER_LIBRARY.find(a => a.id === selectedAdapterId)
+      ?? serverAdapters.list.find(a => a.id === selectedAdapterId)
       ?? customAdapters.list.find(a => a.id === selectedAdapterId);
     if (!def) return;
     const { cols, rows } = getGridSize();
@@ -194,6 +210,7 @@ function addModule() {
 
   function adapterHasOptionalFeatures(adapterId) {
     const def = ADAPTER_LIBRARY.find(a => a.id === adapterId)
+      ?? serverAdapters.list.find(a => a.id === adapterId)
       ?? customAdapters.list.find(a => a.id === adapterId);
     const opt = /** @type {any} */ (def)?.optionalFeatures;
     return opt && Object.values(opt).some(arr => Array.isArray(arr) && arr.length > 0);
@@ -258,24 +275,6 @@ function addModule() {
   // ── Custom adapter upload ──
   let fileInput = $state(null);
 
-  function validateAdapterJson(data) {
-    const items = Array.isArray(data) ? data : [data];
-    for (const item of items) {
-      if (typeof item.id !== 'string' || !item.id) return 'Missing or invalid "id"';
-      if (typeof item.name !== 'string' || !item.name) return 'Missing or invalid "name"';
-      if (typeof item.category !== 'string') return 'Missing "category"';
-      if (typeof item.pitch !== 'number') return `"pitch" must be a number (got ${typeof item.pitch})`;
-      if (!Array.isArray(item.throughPins)) return 'Missing "throughPins" array';
-      if (!item.features || typeof item.features !== 'object') return 'Missing "features" object';
-      if (!Array.isArray(item.features.copper)) return 'Missing "features.copper" array';
-      if (!item.outline || typeof item.outline.width !== 'number' || typeof item.outline.height !== 'number')
-        return 'Missing or invalid "outline" ({width, height})';
-      if (typeof item.widthPins !== 'number') return 'Missing "widthPins"';
-      if (typeof item.heightPins !== 'number') return 'Missing "heightPins"';
-    }
-    return null;
-  }
-
   function handleAdapterFileUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -289,7 +288,8 @@ function addModule() {
         alert(`Invalid JSON: ${file.name}`);
         return;
       }
-      const error = validateAdapterJson(data);
+      const items = Array.isArray(data) ? data : [data];
+      const error = items.reduce((/** @type {string|null} */ acc, item) => acc ?? validateAdapterDef(item), null);
       if (error) {
         alert(`Adapter JSON validation failed:\n${error}`);
         return;
@@ -318,6 +318,7 @@ function addModule() {
      <button class="add-btn adapter-accent" onclick={addAdapter} disabled={!selectedAdapterId} title="Place adapter">+</button>
     <select class="item-select adapter-accent" bind:value={selectedAdapterId}>
       <option value="">Adapter...</option>
+      <option value={VARIABLE_SUBGRID_ADAPTER_ID}>🏁 Variable Sub-Grid</option>
       {#each Object.entries(adapterCategories) as [cat, adps]}
         <optgroup label={cat === 'Custom' ? '★ Custom' : cat}>
           {#each adps as adp}
@@ -347,7 +348,7 @@ function addModule() {
     <button class="add-btn module-accent" onclick={addModule} disabled={!selectedModuleId} title="Place module">+</button>
     <select class="item-select module-accent" bind:value={selectedModuleId}>
       <option value="">Module...</option>
-      <option value={RESERVED_AREA_MODULE_ID}>⬜ Reserved Area</option>
+      <option value={RESERVED_AREA_MODULE_ID}>🔒 Reserved Area</option>
       {#each Object.entries(moduleCategories) as [cat, mods]}
         <optgroup label={cat}>
           {#each mods as mod}

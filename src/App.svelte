@@ -4,9 +4,11 @@
   import ModuleToolbar from './components/ModuleToolbar.svelte';
   import { generateAllFiles } from './lib/gerber.js';
   import { downloadAsZip } from './lib/zip.js';
-  import { getAdapterForInstance, registerCustomAdapters } from './lib/adapters.js';
+  import { onMount } from 'svelte';
+  import { getAdapterForInstance, registerCustomAdapters, registerServerAdapters, validateAdapterDef } from './lib/adapters.js';
   import { parseProject, serializeProject } from './lib/projectFile.js';
   import { customAdapters } from './lib/customAdapters.svelte.js';
+  import { serverAdapters } from './lib/serverAdapters.svelte.js';
   import { applyPitchProfile } from './lib/gridProfiles.js';
 
   const defaultConfig = applyPitchProfile({
@@ -47,14 +49,46 @@
   let selectedSilkLineIndex = $state(null);
   let pendingPitch = $state(defaultConfig.pitch);
 
-  // Keep plain-JS adapter lookup in sync with the reactive custom list
+  // Keep plain-JS adapter lookups in sync with reactive stores
   $effect(() => { registerCustomAdapters(customAdapters.list); });
+  $effect(() => { registerServerAdapters(serverAdapters.list); });
 
-  // Reference customAdapters.list so this re-derives when the custom library changes
+  // Reference both lists so this re-derives when either library changes
   let resolvedAdapters = $derived(adapters.map(inst => {
     void customAdapters.list; // reactive dependency
+    void serverAdapters.list; // reactive dependency
     return { ...inst, _adapterDef: getAdapterForInstance(inst) };
   }));
+
+  onMount(async () => {
+    try {
+      const indexRes = await fetch('./assets/adapters/index.json');
+      if (!indexRes.ok) return;
+      const filenames = await indexRes.json();
+      if (!Array.isArray(filenames)) return;
+
+      const loaded = [];
+      for (const filename of filenames) {
+        if (typeof filename !== 'string') continue;
+        try {
+          const res = await fetch(`./assets/adapters/${filename}`);
+          if (!res.ok) { console.warn(`serverAdapters: could not load ${filename}`); continue; }
+          const data = await res.json();
+          const items = Array.isArray(data) ? data : [data];
+          for (const item of items) {
+            const err = validateAdapterDef(item);
+            if (err) { console.warn(`serverAdapters: skipping ${filename} — ${err}`); continue; }
+            loaded.push(item);
+          }
+        } catch (e) {
+          console.warn(`serverAdapters: error loading ${filename}`, e);
+        }
+      }
+      if (loaded.length > 0) serverAdapters.add(loaded);
+    } catch (e) {
+      // index.json not present — server library is empty, silently ignore
+    }
+  });
 
   function onSelect(id) {
     selectedInstanceId = id;

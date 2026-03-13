@@ -48,6 +48,9 @@ export const VARIABLE_SUBGRID_PAD_SHAPES = ['circle', 'square', 'square-smd'];
 /** Runtime-registered custom adapters (updated via registerCustomAdapters). */
 let _customAdapters = [];
 
+/** Runtime-registered server library adapters (updated via registerServerAdapters). */
+let _serverAdapters = [];
+
 /**
  * Called by App.svelte whenever the customAdaptersList store changes.
  * Keeps the plain-JS lookup functions in sync without requiring Svelte runes here.
@@ -57,9 +60,38 @@ export function registerCustomAdapters(list) {
   _customAdapters = list;
 }
 
-/** Returns all built-in + custom adapters combined. */
+/**
+ * Called by App.svelte whenever the serverAdapters store changes.
+ * @param {any[]} list
+ */
+export function registerServerAdapters(list) {
+  _serverAdapters = list;
+}
+
+/** Returns all built-in + server library + custom adapters combined. */
 export function getAllAdapters() {
-  return [...ADAPTER_LIBRARY, ..._customAdapters];
+  return [...ADAPTER_LIBRARY, ..._serverAdapters, ..._customAdapters];
+}
+
+/**
+ * Validate a single adapter definition object.
+ * Returns an error string if invalid, or null if valid.
+ * @param {any} item
+ * @returns {string|null}
+ */
+export function validateAdapterDef(item) {
+  if (typeof item.id !== 'string' || !item.id) return 'Missing or invalid "id"';
+  if (typeof item.name !== 'string' || !item.name) return 'Missing or invalid "name"';
+  if (typeof item.category !== 'string') return 'Missing "category"';
+  if (typeof item.pitch !== 'number') return `"pitch" must be a number (got ${typeof item.pitch})`;
+  if (!Array.isArray(item.throughPins)) return 'Missing "throughPins" array';
+  if (!item.features || typeof item.features !== 'object') return 'Missing "features" object';
+  if (!Array.isArray(item.features.copper)) return 'Missing "features.copper" array';
+  if (!item.outline || typeof item.outline.width !== 'number' || typeof item.outline.height !== 'number')
+    return 'Missing or invalid "outline" ({width, height})';
+  if (typeof item.widthPins !== 'number') return 'Missing "widthPins"';
+  if (typeof item.heightPins !== 'number') return 'Missing "heightPins"';
+  return null;
 }
 
 
@@ -68,8 +100,7 @@ export function getAllAdapters() {
 export const ADAPTER_LIBRARY = [
     {
       id: VARIABLE_SUBGRID_ADAPTER_ID,
-      name: 'Variable Sub-Grid',
-      category: 'Grid',      
+      name: 'Variable Sub-Grid',     
       color: '#606060',
       throughPins: [],
       features: {
@@ -91,7 +122,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: 'bridge_1x3_254',
       name: 'Bridge (1x3)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 2.54,
       color: '#606060',
 
@@ -123,7 +154,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: 'bridge_1x4_254',
       name: 'Bridge (1x4)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 2.54,
       color: '#606060',
 
@@ -157,7 +188,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: 'bridge_1x3_200',
       name: 'Bridge (1x3)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 2.00,
       color: '#606060',
 
@@ -189,7 +220,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: 'bridge_1x4_200',
       name: 'Bridge (1x4)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 2.00,
       color: '#606060',
 
@@ -222,7 +253,7 @@ export const ADAPTER_LIBRARY = [
 {
       id: 'bridge_1x3_127',
       name: 'Bridge (1x3)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 1.27,
       color: '#606060',
 
@@ -253,7 +284,7 @@ export const ADAPTER_LIBRARY = [
     {
       id: 'bridge_1x4_127',
       name: 'Bridge (1x4)',
-      category: 'Grid',
+      category: 'Bridge',
       pitch: 1.27,
       color: '#606060',
 

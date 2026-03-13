@@ -41,6 +41,21 @@ export const MODULE_LIBRARY = [
     outline: { width: 0, height: 0 }, // not used – computed from instance widthPins/heightPins
   },
   {
+    id: 'usb-c-pd',
+    name: 'USB-C PD Module',
+    category: 'Power',
+    pitch: 2.54,
+    widthPins: 10,    // across (pin-to-pin)
+    heightPins: 4,   // along (pins per side)
+    pinRows: [
+      { x: 9, y: 0, count: 2, dx: 0, dy: 4 },   // right column
+    ],
+    outline: { width: 23.3, height: 12 },
+    outlineOffset: { x: 0, y: 1.27 },  // body extends above the pin row
+    color: '#e03056',
+    overlay: true,
+  },
+  {
     id: 'esp32-devkit-30pin',
     name: 'ESP32 DevKit (30-pin)',
     category: 'Microcontroller',
