@@ -36,6 +36,7 @@ const COLORS = {
 
 const DEFAULT_ADAPTER = {
   id: "ic-id", name: "New IC", category: "Not Set",
+  meta: { author: "", license: "", source: "" },
   widthPins: 4, heightPins: 4,
   originOffset: { x: 0, y: 0, rot: 0 },
   smdPads: [], traces: [], throughPins: [], silkBody: null, silkLines: [], silkText: [],
@@ -499,6 +500,8 @@ function AdapterEditor() {
   const isDraggingSilkLabel = useRef(false);
   const didDragSilkLabel = useRef(false);
   const dragSilkLabelStart = useRef(null);
+  const isDraggingSilkText = useRef(false);
+  const dragSilkTextStart = useRef(null);
   const [selectedBottomPad, setSelectedBottomPad] = useState(null);
   const [selectedBottomTrace, setSelectedBottomTrace] = useState(null);
   const [selectedVia, setSelectedVia] = useState(null);
@@ -552,6 +555,21 @@ function AdapterEditor() {
           dragSilkLabelStart.current = { wx: w.x, wy: w.y, lx: adapter.silkLabel.x, ly: adapter.silkLabel.y };
         }
       }
+    } else if (e.button === 0 && tool === 'select' && selectedSilkText !== null) {
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (rect) {
+        const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+        const w = toWorld(sx, sy);
+        const t = adapter.silkText[selectedSilkText];
+        if (t) {
+          const tp = transformPoint(t.x, t.y);
+          const fh = t.height || 1;
+          if (Math.abs(w.x - tp.x) < t.text.length * fh * 0.3 + 0.5 && Math.abs(w.y - tp.y) < fh + 0.3) {
+            isDraggingSilkText.current = true;
+            dragSilkTextStart.current = { wx: w.x, wy: w.y, lx: t.x, ly: t.y };
+          }
+        }
+      }
     }
   };
 
@@ -566,22 +584,28 @@ function AdapterEditor() {
       const dy = w.y - dragSilkLabelStart.current.wy;
       didDragSilkLabel.current = true;
       setAdapter(a => ({ ...a, silkLabel: { ...a.silkLabel, x: roundTo(dragSilkLabelStart.current.lx + dx, 3), y: roundTo(dragSilkLabelStart.current.ly + dy, 3) } }));
+    } else if (isDraggingSilkText.current && dragSilkTextStart.current) {
+      const dx = w.x - dragSilkTextStart.current.wx;
+      const dy = w.y - dragSilkTextStart.current.wy;
+      setAdapter(a => { const st = [...a.silkText]; st[selectedSilkText] = { ...st[selectedSilkText], x: roundTo(dragSilkTextStart.current.lx + dx, 3), y: roundTo(dragSilkTextStart.current.ly + dy, 3) }; return { ...a, silkText: st }; });
     }
     setMousePos({ screen: { sx, sy }, world: w, snapped: snapWorld(w.x, w.y) });
   };
 
-  const handleMouseUp = () => { isPanning.current = false; isDraggingSilkLabel.current = false; };
+  const handleMouseUp = () => { isPanning.current = false; isDraggingSilkLabel.current = false; isDraggingSilkText.current = false; };
 
   const finishTrace = useCallback(() => {
     if (tracePoints.length >= 2) {
       const segments = [];
       for (let i = 0; i < tracePoints.length - 1; i++) {
-        segments.push({ x1: tracePoints[i].x, y1: tracePoints[i].y, x2: tracePoints[i + 1].x, y2: tracePoints[i + 1].y, w: traceWidth });
+        const p1 = inverseTransformPoint(tracePoints[i].x, tracePoints[i].y);
+        const p2 = inverseTransformPoint(tracePoints[i + 1].x, tracePoints[i + 1].y);
+        segments.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, w: traceWidth });
       }
-      setAdapter(a => ({ ...a, traces: [...a.traces, { segments, applyOriginOffset: false }] }));
+      setAdapter(a => ({ ...a, traces: [...a.traces, { segments }] }));
     }
     setTracePoints([]);
-  }, [tracePoints, traceWidth]);
+  }, [tracePoints, traceWidth, inverseTransformPoint]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -605,6 +629,13 @@ function AdapterEditor() {
       const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
       const dy = e.key === "ArrowUp" ? step : e.key === "ArrowDown" ? -step : 0;
       setAdapter(a => ({ ...a, silkLabel: { ...a.silkLabel, x: roundTo(a.silkLabel.x + dx, 3), y: roundTo(a.silkLabel.y + dy, 3) } }));
+    }
+    else if (selectedSilkText !== null && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+      e.preventDefault();
+      const step = e.shiftKey ? 0.127 : 0.5;
+      const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      const dy = e.key === "ArrowUp" ? step : e.key === "ArrowDown" ? -step : 0;
+      setAdapter(a => { const st = [...a.silkText]; st[selectedSilkText] = { ...st[selectedSilkText], x: roundTo(st[selectedSilkText].x + dx, 3), y: roundTo(st[selectedSilkText].y + dy, 3) }; return { ...a, silkText: st }; });
     }
     else if (e.key === "v") { setTool("select"); setTracePoints([]); }
     else if (e.key === "t") { setTool("trace"); setTracePoints([]); }
@@ -650,7 +681,7 @@ function AdapterEditor() {
       vias: parsed.vias.map(v => ({ x: roundTo(v.x, 3), y: roundTo(-v.y, 3), size: v.size, drill: v.drill })),
     };
     const rotated = applyFootprintRotationToImport(imported, adapter.originOffset.rot || 0);
-    setAdapter(a => ({ ...a, smdPads: rotated.smdPads, silkBody: rotated.silkBody, silkLines: rotated.silkLines, silkText: rotated.silkText, traces: rotated.topTraces.map(t => ({ ...t, applyOriginOffset: true })) }));
+    setAdapter(a => ({ ...a, meta: { ...(a.meta || {}), source: "Imported from KiCad" }, smdPads: rotated.smdPads, silkBody: rotated.silkBody, silkLines: rotated.silkLines, silkText: rotated.silkText, traces: rotated.topTraces.map(t => ({ ...t, applyOriginOffset: true })) }));
     setBottomTraces(rotated.bottomTraces);
     setBottomPads(rotated.bottomPads || []);
     setVias(rotated.vias);
@@ -717,6 +748,7 @@ function AdapterEditor() {
     setAdapter({
       id: obj.id || 'ic-id',
       name: obj.name || 'New IC',
+      meta: { author: obj.meta?.author || "", license: obj.meta?.license || "", source: obj.meta?.source || "" },
       category: obj.category || 'Not Set',
       widthPins: obj.widthPins || 4,
       heightPins: obj.heightPins || 4,
@@ -775,8 +807,18 @@ function AdapterEditor() {
     return Math.abs(out) < 0.01 ? 0 : out;
   }, [adapter.originOffset.rot]);
 
+  const inverseTransformPoint = useCallback((x, y) => {
+    const rot = adapter.originOffset.rot || 0;
+    const ox = adapter.originOffset.x || 0;
+    const oy = adapter.originOffset.y || 0;
+    const dx = x - ox, dy = y - oy;
+    if (!rot) return { x: roundTo(dx, 3), y: roundTo(dy, 3) };
+    const rad = -rot * Math.PI / 180;
+    const cosR = Math.cos(rad), sinR = Math.sin(rad);
+    return { x: roundTo(dx * cosR - dy * sinR, 3), y: roundTo(dx * sinR + dy * cosR, 3) };
+  }, [adapter.originOffset.rot, adapter.originOffset.x, adapter.originOffset.y]);
+
   const transformTracePoint = useCallback((trace, x, y) => {
-    if (trace?.applyOriginOffset === false) return { x, y };
     return transformPoint(x, y);
   }, [transformPoint]);
 
@@ -856,9 +898,11 @@ function AdapterEditor() {
 
     const overlay = false;
 
+    const metaEntries = Object.entries({ author: adapter.meta?.author, license: adapter.meta?.license, source: adapter.meta?.source }).filter(([, v]) => v);
     const obj = {
       id,
       name,
+      ...(metaEntries.length ? { meta: Object.fromEntries(metaEntries) } : {}),
       category,
       pitch: baseGrid,
       color: '#a060c0',
@@ -868,7 +912,7 @@ function AdapterEditor() {
       outlineOffset: { x: 0, y: 0 },
       widthPins,
       heightPins,      
-      silkLabel: adapter.silkLabel?.show ? {text:adapter.name, rotation:0, x: adapter.silkLabel.x, y: adapter.silkLabel.y, height: adapter.silkLabel.height || 1 } : undefined,
+      ...(adapter.silkLabel?.show ? { silkLabel: { text: adapter.name, rotation: 0, x: adapter.silkLabel.x, y: adapter.silkLabel.y, height: adapter.silkLabel.height || 1 } } : {}),
       overlay,
     };
 
@@ -931,6 +975,12 @@ function AdapterEditor() {
             React.createElement("input", { value: adapter.name, onChange: e => setAdapter(a => ({ ...a, name: e.target.value })), style: inputStyle }),
             React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Cat."),
             React.createElement("input", { value: adapter.category, onChange: e => setAdapter(a => ({ ...a, category: e.target.value })), style: inputStyle }),
+            React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Author"),
+            React.createElement("input", { value: adapter.meta?.author || "", onChange: e => setAdapter(a => ({ ...a, meta: { ...a.meta, author: e.target.value } })), style: inputStyle, placeholder: "optional" }),
+            React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "License"),
+            React.createElement("input", { value: adapter.meta?.license || "", onChange: e => setAdapter(a => ({ ...a, meta: { ...a.meta, license: e.target.value } })), style: inputStyle, placeholder: "optional" }),
+            React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Source"),
+            React.createElement("input", { value: adapter.meta?.source || "", onChange: e => setAdapter(a => ({ ...a, meta: { ...a.meta, source: e.target.value } })), style: inputStyle, placeholder: "optional" }),
             React.createElement("label", { style: { fontSize: 10, color: COLORS.textDim } }, "Grid"),
             React.createElement("div", { style: { display: "flex", gap: 4, alignItems: "center" } },
               React.createElement("input", { type: "number", min: 1, max: 20, value: adapter.widthPins, onChange: e => setAdapter(a => ({ ...a, widthPins: parseInt(e.target.value) || 1 })), style: { ...inputStyle, width: 40 } }),
@@ -1058,6 +1108,7 @@ function AdapterEditor() {
               const gridH = Math.round(result.boardH / baseGrid) + 1;
               setAdapter(a => ({
                 ...a,
+                meta: { ...(a.meta || {}), source: "Imported from KiCad" },
                 widthPins: gridW, heightPins: gridH,
                 smdPads: rotated.smdPads,
                 traces: rotated.topTraces.map(t => ({ ...t, applyOriginOffset: true })),
@@ -1179,7 +1230,8 @@ function AdapterEditor() {
             content = React.createElement(React.Fragment, null,
               React.createElement("input", { value: t.text, onChange: e => upd('text', e.target.value), style: { ...inputStyle, width: "100%", marginTop: 4 } }),
               g2(lbl("X"), numIn(t.x, v => upd('x', v)), lbl("Y"), numIn(t.y, v => upd('y', v)),
-                lbl("H"), numIn(t.height || 1, v => upd('height', v), 0.1), lbl("Rot"), numIn(t.rotation || 0, v => upd('rotation', v), 1)));
+                lbl("H"), numIn(t.height || 1, v => upd('height', v), 0.1), lbl("Rot"), numIn(t.rotation || 0, v => upd('rotation', v), 1)),
+              React.createElement("div", { style: { fontSize: 9, color: COLORS.textDim, marginTop: 4 } }, "← → ↑ ↓ move | Shift = 0.127mm | drag"));
           }
           return React.createElement("fieldset", { style: { border: `1px solid ${COLORS.accent}`, padding: 8, borderRadius: 4 } },
             React.createElement("legend", { style: { color: COLORS.accent, fontSize: 10 } }, title),
